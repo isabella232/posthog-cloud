@@ -1,0 +1,17 @@
+{
+  "name": "posthog-production",
+  "version": "1.0.0",
+  "cacheDirectories": [
+    "deploy/frontend/node_modules"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/timgl/posthog.git"
+  },
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/timgl/posthog/issues"
+  },
+  "homepage": "https://github.com/timgl/posthog#readme"
+}
