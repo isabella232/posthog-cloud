@@ -1,0 +1,44 @@
+{
+  "name": "PostHog - Product analytics",
+  "website": "https://www.posthog.com",
+  "repository": "https://github.com/posthog/posthog",
+  "logo": "https://posthog.com/wp-content/uploads/2020/02/Group-10.png",
+  "environments": {
+    "review": {
+      "scripts": {
+        "postdeploy": ""
+      },
+      "env": {
+        "DEBUG": true
+      },
+      "buildpacks": [
+        {"url": "heroku/nodejs"},
+        {"url": "https://github.com/timgl/heroku-buildpack-python.git"}
+      ]
+    },
+    "test": {
+      "addons": ["heroku-postgresql:in-dyno"],
+      "scripts": {
+        "test": "python manage.py test --keepdb -v 2"
+      },
+      "buildpacks": [
+        {"url": "https://github.com/timgl/heroku-buildpack-python.git"}
+      ]
+    }
+  },
+  "buildpacks": [
+        {"url": "heroku/nodejs"},
+        {"url": "https://github.com/timgl/heroku-buildpack-python.git"}
+  ],
+  "addons": [
+      "heroku-postgresql"
+  ],
+  "scripts": {
+      "postdeploy": "bin/pull_posthog && cd deploy && pip install -r requirements.txt && cd frontend && yarn install && yarn build"
+  },
+  "env": {
+      "SECRET_KEY": {
+          "generator": "secret"
+      }
+  }
+}

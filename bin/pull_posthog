@@ -1,0 +1,5 @@
+rm -rf deploy
+mkdir deploy
+curl -L https://github.com/posthog/posthog/tarball/separate-multi-tenancy-code | tar --strip-components=1 -xz --exclude-from=.tarignore -C deploy --
+ln -s "$(pwd)"/multi_tenancy "$(pwd)"/deploy/multi_tenancy
+ln -s "$(pwd)"/settings.py "$(pwd)"/deploy/posthog/settings.py
