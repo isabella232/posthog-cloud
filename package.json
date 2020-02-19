@@ -1,8 +1,12 @@
 {
   "name": "posthog-production",
   "version": "1.0.0",
+  "scripts": {
+    "heroku-postbuild": "",
+    "build": ""
+  },
   "cacheDirectories": [
-    "deploy/frontend/node_modules"
+    "frontend/node_modules"
   ],
   "repository": {
     "type": "git",
