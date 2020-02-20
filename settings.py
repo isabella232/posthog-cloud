@@ -87,7 +87,7 @@ ROOT_URLCONF = 'multi_tenancy.urls'
 TEMPLATES = [
     {
         'BACKEND': 'django.template.backends.django.DjangoTemplates',
-        'DIRS': ['frontend/dist', 'multi_tenancy/templates'],
+        'DIRS': ['multi_tenancy/templates', 'frontend/dist'],
         'APP_DIRS': True,
         'OPTIONS': {
             'context_processors': [
