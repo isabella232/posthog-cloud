@@ -6,7 +6,7 @@
   "environments": {
     "review": {
       "scripts": {
-        "postdeploy": ""
+        "postdeploy": "bin/pull_posthog && cd deploy/frontend && yarn install && yarn build && cd .. && cp requirements.txt ../"
       },
       "env": {
         "DEBUG": true
