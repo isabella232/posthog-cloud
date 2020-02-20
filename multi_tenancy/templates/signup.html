@@ -1,33 +1,44 @@
 {% extends 'layout.html' %}
 
 {% block content %}
-    <form class="form-signin" method="post" action="/signup">
+    <form class="form-signin" method="post" action="/signup" style="max-width: 1024px">
         {% csrf_token %}
         <img class="mb-4" src="/docs/4.4/assets/brand/bootstrap-solid.svg" alt="" width="72" height="72">
-        <h1 class="h3 mb-3 font-weight-normal">Create PostHog account</h1>
-
-        {% if error %}
-        <p>That account already exists. <a href='/login'>Try logging in?</a>.</p>
-        {% endif %}
-        <div class='form-signin-inputs'>
-            <div class='field'>
-                <input type="name" name='company_name' id="inputCompany" value="{{ company_name }}" placeholder="Company name" required autofocus>
-                <label for="inputCompany" >Company name</label>
+        <div class="row">
+            <div class='col-6' style="border-right: 1px solid rgba(0, 0, 0, 0.1);padding-right: 30px">
+                <h1 class="h3 mb-3 font-weight-normal">Create a PostHog.com account</h1>
+                All the PostHog goodies, hosted by us. 
+                {% if error %}
+                <p>That account already exists. <a href='/login'>Try logging in?</a>.</p>
+                {% endif %}
+                <div class='form-signin-inputs'>
+                    <div class='field'>
+                        <input type="name" name='company_name' id="inputCompany" value="{{ company_name }}" placeholder="Company name" required autofocus>
+                        <label for="inputCompany" >Company name</label>
+                    </div>
+                    <div class='field'>
+                        <input type="name" name='name' id="inputName" placeholder="Name" value="{{ name }}" required>
+                        <label for="inputName" >Name</label>
+                    </div>
+                    <div class='field'>
+                        <input type="email" name='email' id="inputEmail" value="{{ email }}" placeholder="Email address" required>
+                        <label for="inputEmail">Email address</label>
+                    </div>
+                    <div class='field'>
+                        <input type="password" name='password' id="inputPassword" placeholder="Password" required>
+                        <label for="inputPassword">Password</label>
+                    </div>
+                </div>
+                <p>Already have an account? <a href='/login'>Log in here.</a></p>
+                <button class="btn btn-lg btn-primary btn-block" type="submit">Start free trial</button>
             </div>
-            <div class='field'>
-                <input type="name" name='name' id="inputName" placeholder="Name" value="{{ name }}" required>
-                <label for="inputName" >Name</label>
-            </div>
-            <div class='field'>
-                <input type="email" name='email' id="inputEmail" value="{{ email }}" placeholder="Email address" required>
-                <label for="inputEmail">Email address</label>
-            </div>
-            <div class='field'>
-                <input type="password" name='password' id="inputPassword" placeholder="Password" required>
-                <label for="inputPassword">Password</label>
+            <div class='col-6' style="padding-left: 30px">
+                <h1 class="h3 mb-3 font-weight-normal">Host it yourself</h1>
+                You can host your own instance of PostHog on your own infrastructure.<br /><br />
+                <a href="https://heroku.com/deploy?template=https://github.com/posthog/posthog"><img alt="Deploy" src="https://www.herokucdn.com/deploy/button.svg" style="max-width:100%;"></a>
+                <br /><br />
+                Or <a href="https://github.com/posthog/posthog">click here for Docker or building from source.</a>
             </div>
         </div>
-        <p>Already have an account? <a href='/login'>Log in here.</a></p>
-        <button class="btn btn-lg btn-primary btn-block" type="submit">Create account</button>
     </form>
 {% endblock %}

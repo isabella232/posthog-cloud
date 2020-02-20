@@ -1,0 +1,7 @@
+rm -rf deploy
+mkdir deploy
+curl -L https://github.com/posthog/posthog/tarball/master | tar --strip-components=1 -xz --exclude-from=.tarignore -C deploy --
+ln -s "$(pwd)"/multi_tenancy "$(pwd)"/deploy/
+cp "$(pwd)"/settings.py "$(pwd)"/deploy/posthog/settings.py
+cd deploy
+pip install -r requirements.txt
