@@ -28,7 +28,7 @@ def signup_view(request):
             'company_name': company_name,
             'name': user.first_name
         })
-        return redirect('/setup')
+        return redirect('/')
 
 urlpatterns = posthog_urls[:-1]
 
