@@ -2,11 +2,11 @@
   "name": "posthog-production",
   "version": "1.0.0",
   "scripts": {
-    "heroku-postbuild": "bin/pull_posthog && cd deploy/frontend && npm install && npm run build && cd .. && cp requirements.txt ../",
+    "heroku-postbuild": "bin/pull_posthog && cd deploy && yarn install && yarn build && cp requirements.txt ../",
     "build": ""
   },
   "cacheDirectories": [
-    "frontend/node_modules"
+    "deploy/posthog/node_modules"
   ],
   "repository": {
     "type": "git",
