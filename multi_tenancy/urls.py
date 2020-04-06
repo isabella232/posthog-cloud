@@ -2,7 +2,10 @@ from posthog.urls import urlpatterns as posthog_urls, home, render_template
 from django.urls import path, include, re_path
 from django.shortcuts import redirect
 from django.contrib.auth import login, decorators
+from django.template.loader import render_to_string
+from django.http import HttpResponse
 from posthog.models import User, Team
+
 import posthoganalytics
 
 def signup_view(request):
