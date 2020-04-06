@@ -23,7 +23,7 @@ def signup_view(request):
         except:
             return render_template('signup.html', request=request, context={'error': True, 'email': request.POST['email'], 'company_name': request.POST.get('company_name'), 'name': request.POST.get('name')})
         team = Team.objects.create_with_data(users=[user], name=company_name)
-        login(request, user)
+        login(request, user, backend='django.contrib.auth.backends.ModelBackend')
         posthoganalytics.capture(user.distinct_id, 'user signed up', properties={'is_first_user': is_first_user})
         posthoganalytics.identify(user.distinct_id, properties={
             'email': user.email,
