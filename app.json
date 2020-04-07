@@ -36,6 +36,16 @@
   "scripts": {
       "postdeploy": "bin/pull_posthog && cd deploy && pip install -r requirements.txt && cd frontend && yarn install && yarn build"
   },
+  "formation": {
+      "web": {
+          "quantity": 2,
+          "size": "standard-2X"
+      },
+      "worker": {
+          "quantity": 1,
+          "size": "standard-2X"
+      }
+  }
   "env": {
       "SECRET_KEY": {
           "generator": "secret"
