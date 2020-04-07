@@ -45,7 +45,7 @@
           "quantity": 1,
           "size": "standard-2X"
       }
-  }
+  },
   "env": {
       "SECRET_KEY": {
           "generator": "secret"
