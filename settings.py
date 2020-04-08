@@ -151,6 +151,29 @@ DATABASES = {
     'default': dj_database_url.config(default=DATABASE_URL, conn_max_age=600)
 }
 
+# Broker
+if TEST or DEBUG:
+    REDIS_URL = os.environ.get('REDIS_URL', 'redis://localhost')
+else:
+    REDIS_URL = os.environ.get('REDIS_URL', '')
+
+if not REDIS_URL:
+    print("⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️")
+    print("️⚠️ 🚨🚨🚨 PostHog warning! 🚨🚨🚨")
+    print("⚠️")
+    print("️⚠️ The environment variable REDIS_URL is not configured!")
+    print("⚠️ Redis will be mandatory in the next versions of PostHog (1.1.0+).")
+    print("⚠️ Please configure it now to avoid future surprises!")
+    print("⚠️")
+    print("⚠️ See here for more information!")
+    print("⚠️ --> https://docs.posthog.com/#/upgrading-posthog?id=upgrading-from-before-1011")
+    print("⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️")
+    # TODO: remove this message and throw an error in PostHog 1.1.0
+    # raise ImproperlyConfigured(f'The environment var "REDIS_URL" is absolutely required to run this software. If you\'re upgrading from an earlier version of PostHog, see here: https://docs.posthog.com/#/upgrading-posthog?id=upgrading-from-before-1011')
+
+
+CELERY_BROKER_URL = REDIS_URL
+
 # Password validation
 # https://docs.djangoproject.com/en/2.2/ref/settings/#auth-password-validators
 
