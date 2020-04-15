@@ -244,7 +244,3 @@ DEFAULT_FROM_EMAIL = os.environ.get('DEFAULT_FROM_EMAIL', 'tim@posthog.com')
 
 # You can pass a comma deliminated list of domains with which users can sign up to this service
 RESTRICT_SIGNUPS = os.environ.get('RESTRICT_SIGNUPS', False)
-
-if os.environ.get('INCLUDE_DOCS', False):
-    INCLUDE_API_DOCS = True
-    INSTALLED_APPS.append('drf_yasg')
