@@ -1,5 +1,12 @@
 rm -rf deploy
 mkdir deploy
-curl -L https://github.com/posthog/posthog/tarball/master | tar --strip-components=1 -xz --exclude-from=.tarignore -C deploy --
+curl -L https://github.com/posthog/posthog/tarball/master | tar --strip-components=1 -xz -C deploy --
 cp -r multi_tenancy deploy/
-cp settings.py deploy/posthog/settings.py
+
+echo -e '\n\n# multi-tenancy config' >> deploy/posthog/settings.py
+echo -e '\nMULTI_TENANCY = os.environ.get(\'MULTI_TENANCY\', True)' >> deploy/posthog/settings.py
+echo -e '\nROOT_URLCONF = \'multi_tenancy.urls\'' >> deploy/posthog/settings.py
+echo -e '\nif INSTALLED_APPS and isinstance(INSTALLED_APPS, list):' >> deploy/posthog/settings.py
+echo -e '\n\tINSTALLED_APPS.append(\'multi_tenancy.apps.MultiTenancyConfig\')' >> deploy/posthog/settings.py
+echo -e '\nif TEMPLATES and TEMPLATES[0] and TEMPLATES[0][\'DIRS\'] and isinstance(TEMPLATES[0][\'DIRS\'], list):' >> deploy/posthog/settings.py
+echo -e '\n\tTEMPLATES[0][\'DIRS\'].append(\'multi_tenancy/templates\')' >> deploy/posthog/settings.py

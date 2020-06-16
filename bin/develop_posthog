@@ -1,7 +1,15 @@
 rm -rf deploy
 mkdir deploy
-curl -L https://github.com/posthog/posthog/tarball/master | tar --strip-components=1 -xz --exclude-from=.tarignore -C deploy --
+curl -L https://github.com/posthog/posthog/tarball/master | tar --strip-components=1 -xz -C deploy --
 ln -s "$(pwd)"/multi_tenancy "$(pwd)"/deploy/
-cp "$(pwd)"/settings.py "$(pwd)"/deploy/posthog/settings.py
+
+echo -e '\n\n# multi-tenancy config' >> "$(pwd)"/deploy/posthog/settings.py
+echo -e '\nMULTI_TENANCY = os.environ.get(\'MULTI_TENANCY\', True)' >> "$(pwd)"/deploy/posthog/settings.py
+echo -e '\nROOT_URLCONF = \'multi_tenancy.urls\'' >> "$(pwd)"/deploy/posthog/settings.py
+echo -e '\nif INSTALLED_APPS and isinstance(INSTALLED_APPS, list):' >> "$(pwd)"/deploy/posthog/settings.py
+echo -e '\n\tINSTALLED_APPS.append(\'multi_tenancy.apps.MultiTenancyConfig\')' >> "$(pwd)"/deploy/posthog/settings.py
+echo -e '\nif TEMPLATES and TEMPLATES[0] and TEMPLATES[0][\'DIRS\'] and isinstance(TEMPLATES[0][\'DIRS\'], list):' >> "$(pwd)"/deploy/posthog/settings.py
+echo -e '\n\tTEMPLATES[0][\'DIRS\'].append(\'multi_tenancy/templates\')' >> "$(pwd)"/deploy/posthog/settings.py
+
 cd deploy
 pip install -r requirements.txt
