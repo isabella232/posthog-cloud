@@ -1,11 +1,22 @@
 {% extends 'layout.html' %}
 
 {% block content %}
-    <form class="form-signin" method="post" action="/signup" style="max-width: 500px">
+    <form class="form-signin" method="post" action="/signup" style="max-width: 1024px">
         {% csrf_token %}
-            <div class='col-3' style="border-right: 1px solid rgba(0, 0, 0, 0.1);padding-right: 30px"></div>
-                <h1 class="h3 mb-3 font-weight-normal">Create a PostHog.com account</h1>
-                All the PostHog goodies, hosted by us. 
+        <div class="row">
+            <div class='col-6' style="padding-left: 30px; padding-right: 60px;">
+                <h1 class="h3 mb-3 font-weight-normal">Get Started for Free</h1>
+                <h4>You will have access to all features immediately such as:</h4>
+                <ul class="list-group">
+                    <li class="list-group-item">Trend Visualizations</li>
+                    <li class="list-group-item">User Funnels</li>
+                    <li class="list-group-item">Cohort Analysis</li>
+                </ul>
+                <br></br>
+                <p>By signing up, you will be started on the the trial growth plan which provides you 500,000 events/month, 12 months of data history, and community support. </p>
+            </div>
+            <div class='col-6' style="border-left: 1px solid rgba(0, 0, 0, 0.1);padding-right: 30px">
+                <h1 class="h3 mb-3 font-weight-normal">Create account</h1>
                 {% if error %}
                 <p class="text-danger">That account already exists. <a href='/login'>Try logging in?</a>.</p>
                 {% endif %}
@@ -28,7 +39,8 @@
                     </div>
                 </div>
                 <p>Already have an account? <a href='/login'>Log in here.</a></p>
-                <button class="btn btn-lg btn-primary btn-block" type="submit">Start free trial</button>
+                <button class="btn btn-lg btn-primary btn-block" type="submit">Get Started</button>
             </div>
+        </div>
     </form>
 {% endblock %}
