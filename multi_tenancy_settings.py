@@ -22,4 +22,5 @@ if (
 # https://github.com/stripe/stripe-python
 
 STRIPE_API_KEY = os.environ.get("STRIPE_API_KEY", "")
+STRIPE_GROWTH_PRICE_ID = os.environ.get("STRIPE_GROWTH_PRICE_ID", "")
 

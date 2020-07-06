@@ -1,6 +1,7 @@
 from django.http import JsonResponse
 from posthog.api.user import user
 from .models import TeamBilling
+from multi_tenancy.stripe import create_subscription
 import json
 
 
@@ -19,15 +20,23 @@ def user_with_billing(request):
         )
 
         if instance.should_setup_billing:
-            output = json.loads(response.content)
 
-            checkout_session = 1
-            output["billing"] = {
-                "should_setup_billing": instance.should_setup_billing,
-                "stripe_checkout_session": checkout_session,
-            }
+            checkout_session = create_subscription(
+                request.user.email, instance.stripe_customer_id
+            )
 
-            response = JsonResponse(output)
+            if checkout_session:
+                output = json.loads(response.content)
+
+                TeamBilling.objects.filter(pk=instance.pk).update(
+                    stripe_checkout_session=checkout_session,
+                )
+                output["billing"] = {
+                    "should_setup_billing": instance.should_setup_billing,
+                    "stripe_checkout_session": checkout_session,
+                }
+
+                response = JsonResponse(output)
 
     return response
 
