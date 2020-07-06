@@ -6,6 +6,7 @@ from django.template.loader import render_to_string
 from django.http import HttpResponse
 from posthog.models import User, Team
 from .views import user_with_billing
+    stripe_checkout_view,
 
 import posthoganalytics
 
@@ -40,4 +41,4 @@ urlpatterns[5] = path("api/user/", user_with_billing) # Override to include bill
 urlpatterns += [
     path('signup', signup_view, name='signup'),
     re_path(r'^.*', decorators.login_required(home)),
-]
+]    path("billing/setup", stripe_checkout_view, name="billing-setup"),

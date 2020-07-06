@@ -40,3 +40,12 @@ def user_with_billing(request):
 
     return response
 
+
+def stripe_checkout_view(request):
+    return render_template(
+        "stripe-checkout.html",
+        request,
+        {"STRIPE_PUBLISHABLE_KEY": settings.STRIPE_PUBLISHABLE_KEY},
+    )
+
+
