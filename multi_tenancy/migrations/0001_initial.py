@@ -9,7 +9,7 @@ class Migration(migrations.Migration):
     initial = True
 
     dependencies = [
-        ('posthog', '0068_auto_20200706_1625'),
+        ('posthog', '0067_team_updated_at'),
     ]
 
     operations = [
