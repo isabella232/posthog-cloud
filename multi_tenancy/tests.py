@@ -58,7 +58,7 @@ class TestTeamBilling(TransactionBaseTest):
             "billing", response_data,
         )  # key should not be present if should_setup_billing = `False`
 
-    def test_team_that_should_set_up_billing_gets_a_checkout_session_started(self):
+    def test_team_that_should_set_up_billing_gets_an_started_checkout_session(self):
 
         team, user = self.create_team_and_user()
         instance = TeamBilling.objects.create(team=team, should_setup_billing=True)
@@ -89,10 +89,9 @@ class TestTeamBilling(TransactionBaseTest):
             instance.stripe_checkout_session,
             response_data["billing"]["stripe_checkout_session"],
         )
+        self.assertEqual(instance.stripe_customer_id, "cus_000111222")
 
-    def test_team_that_should_set_up_billing_with_an_active_subscription_is_not_billed_twice(
-        self,
-    ):
+    def test_cannot_start_double_billing_subscription(self):
         team, user = self.create_team_and_user()
         instance = TeamBilling.objects.create(
             team=team,

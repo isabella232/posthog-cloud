@@ -63,14 +63,14 @@ def user_with_billing(request):
     response = user(request)
 
     if response.status_code == 200:
-        # TO-DO: Handle user having multiple teams
+        # TO-DO: (Future) Handle user having multiple teams
         instance, created = TeamBilling.objects.get_or_create(
             team=request.user.team_set.first()
         )
 
         if instance.should_setup_billing and not instance.is_billing_active:
 
-            checkout_session = create_subscription(
+            checkout_session, customer_id = create_subscription(
                 request.user.email, instance.stripe_customer_id
             )
 
@@ -79,6 +79,7 @@ def user_with_billing(request):
 
                 TeamBilling.objects.filter(pk=instance.pk).update(
                     stripe_checkout_session=checkout_session,
+                    stripe_customer_id=customer_id,
                 )
                 output["billing"] = {
                     "should_setup_billing": instance.should_setup_billing,
