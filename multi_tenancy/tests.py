@@ -76,6 +76,10 @@ class TestTeamBilling(TransactionBaseTest):
         self.assertEqual(
             response_data["billing"]["stripe_checkout_session"], "cs_1234567890"
         )
+        self.assertEqual(
+            response_data["billing"]["subscription_url"],
+            "/billing/setup?session_id=cs_1234567890",
+        )
 
         # Check that the checkout session was saved to the database
         instance.refresh_from_db()

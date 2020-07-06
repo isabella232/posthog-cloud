@@ -37,3 +37,19 @@ def create_subscription(email, customer_id=""):
     session = stripe.checkout.Session.create(**payload)
 
     return session.id
+
+
+def customer_portal_url(customer_id):
+
+    if not settings.STRIPE_API_KEY:
+        logger.warning(
+            "Cannot process billing management because Stripe API key is not set."
+        )
+        return None
+
+    stripe.api_key = settings.STRIPE_API_KEY
+
+    session = stripe.billing_portal.Session.create(customer=customer_id,)
+
+    return session.url
+

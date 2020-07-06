@@ -1,7 +1,10 @@
-from django.http import JsonResponse
+from posthog.urls import render_template
+from django.http import JsonResponse, HttpResponse
+from django.conf import settings
+from django.shortcuts import redirect
 from posthog.api.user import user
-from .models import TeamBilling
-from multi_tenancy.stripe import create_subscription
+from multi_tenancy.models import TeamBilling
+from multi_tenancy.stripe import create_subscription, customer_portal_url
 import json
 
 
@@ -34,6 +37,7 @@ def user_with_billing(request):
                 output["billing"] = {
                     "should_setup_billing": instance.should_setup_billing,
                     "stripe_checkout_session": checkout_session,
+                    "subscription_url": f"/billing/setup?session_id={checkout_session}",
                 }
 
                 response = JsonResponse(output)
@@ -49,3 +53,26 @@ def stripe_checkout_view(request):
     )
 
 
+def stripe_billing_portal(request):
+
+    if not request.user.is_authenticated:
+        return HttpResponse("Unauthorized", status=401)
+
+    instance, created = TeamBilling.objects.get_or_create(
+        team=request.user.team_set.first()
+    )
+
+    if instance.stripe_customer_id:
+        url = customer_portal_url(instance.stripe_customer_id)
+        if url:
+            return redirect(url)
+
+    return redirect("/")
+
+
+def billing_welcome_view(request):
+    return render_template("billing-welcome.html", request)
+
+
+def billing_failed_view(request):
+    return render_template("billing-failed.html", request)
