@@ -5,6 +5,7 @@ from django.contrib.auth import login, decorators
 from django.template.loader import render_to_string
 from django.http import HttpResponse
 from posthog.models import User, Team
+from .views import user_with_billing
 
 import posthoganalytics
 
@@ -33,9 +34,10 @@ def signup_view(request):
         return redirect('/')
 
 urlpatterns = posthog_urls[:-1]
+urlpatterns[5] = path("api/user/", user_with_billing) # Override to include billing information
 
 
 urlpatterns += [
     path('signup', signup_view, name='signup'),
-    re_path(r'^.*', decorators.login_required(home))
+    re_path(r'^.*', decorators.login_required(home)),
 ]
