@@ -23,6 +23,8 @@ class TestTeamBilling(TransactionBaseTest):
         team.save()
         return (team, user)
 
+    # Setting up billing
+
     def test_team_should_not_set_up_billing_by_default(self):
 
         count: int = TeamBilling.objects.count()
@@ -142,3 +144,32 @@ class TestTeamBilling(TransactionBaseTest):
             instance.refresh_from_db()
             self.assertEqual(instance.stripe_checkout_session, "")
 
+    # Manage billing
+
+    def test_user_can_manage_billing(self):
+
+        team, user = self.create_team_and_user()
+        instance = TeamBilling.objects.create(
+            team=team, should_setup_billing=True, stripe_customer_id="cus_12345678",
+        )
+        self.client.force_login(user)
+
+        response = self.client.post("/billing/manage")
+        self.assertEqual(response.status_code, status.HTTP_302_FOUND)
+        self.assertEqual(response.url, "/manage-my-billing/cus_12345678")
+
+    def test_logged_out_user_cannot_manage_billing(self):
+
+        self.client.logout()
+        response = self.client.post("/billing/manage")
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+
+    def test_user_with_no_billing_set_up_cannot_manage_it(self):
+
+        team, user = self.create_team_and_user()
+        instance = TeamBilling.objects.create(team=team, should_setup_billing=True)
+        self.client.force_login(user)
+
+        response = self.client.post("/billing/manage")
+        self.assertEqual(response.status_code, status.HTTP_302_FOUND)
+        self.assertEqual(response.url, "/")

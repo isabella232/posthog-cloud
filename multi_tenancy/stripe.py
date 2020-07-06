@@ -47,6 +47,9 @@ def customer_portal_url(customer_id):
         )
         return None
 
+    if settings.TEST:
+        return f"/manage-my-billing/{customer_id}"
+
     stripe.api_key = settings.STRIPE_API_KEY
 
     session = stripe.billing_portal.Session.create(customer=customer_id,)
