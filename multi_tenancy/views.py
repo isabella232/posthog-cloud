@@ -19,7 +19,7 @@ def user_with_billing(request):
             team=request.user.team_set.first()
         )
 
-        if instance.should_setup_billing:
+        if instance.should_setup_billing and not instance.is_billing_active:
 
             checkout_session = create_subscription(
                 request.user.email, instance.stripe_customer_id

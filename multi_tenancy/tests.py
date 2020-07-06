@@ -1,13 +1,16 @@
 from typing import Dict
+from django.conf import settings
+from django.utils import timezone
+from rest_framework import status
 from posthog.models import User, Team
 from posthog.api.test.base import TransactionBaseTest
-from rest_framework import status
 from multi_tenancy.models import TeamBilling
 import multi_tenancy.stripe as multi_tenancy_stripe
 import random
+import datetime
 
 
-class UnitTestTeamBilling(TransactionBaseTest):
+class TestTeamBilling(TransactionBaseTest):
 
     TESTS_API = True
 
@@ -80,4 +83,58 @@ class UnitTestTeamBilling(TransactionBaseTest):
             instance.stripe_checkout_session,
             response_data["billing"]["stripe_checkout_session"],
         )
+
+    def test_team_that_should_set_up_billing_with_an_active_subscription_is_not_billed_twice(
+        self,
+    ):
+        team, user = self.create_team_and_user()
+        instance = TeamBilling.objects.create(
+            team=team,
+            should_setup_billing=True,
+            billing_period_ends=timezone.now()
+            + datetime.timedelta(minutes=random.randint(10, 99)),
+        )
+        self.client.force_login(user)
+
+        # Make sure the billing is already active
+        self.assertEqual(instance.is_billing_active, True)
+
+        response_data = self.client.post("/api/user/").json()
+        self.assertNotIn("billing", response_data)
+
+    def test_warning_is_logged_if_stripe_variables_are_not_properly_configured(self):
+
+        team, user = self.create_team_and_user()
+        instance = TeamBilling.objects.create(team=team, should_setup_billing=True)
+        self.client.force_login(user)
+
+        with self.settings(STRIPE_GROWTH_PRICE_ID=""):
+
+            with self.assertLogs("multi_tenancy.stripe") as l:
+                response_data = self.client.post("/api/user/").json()
+                self.assertEqual(
+                    l.output[0],
+                    "WARNING:multi_tenancy.stripe:Cannot process billing setup because Stripe env vars are not set.",
+                )
+
+            self.assertNotIn(
+                "billing", response_data
+            )  # even if `should_setup_billing=True`
+            instance.refresh_from_db()
+            self.assertEqual(instance.stripe_checkout_session, "")
+
+        with self.settings(STRIPE_API_KEY=""):
+
+            with self.assertLogs("multi_tenancy.stripe") as l:
+                response_data = self.client.post("/api/user/").json()
+                self.assertEqual(
+                    l.output[0],
+                    "WARNING:multi_tenancy.stripe:Cannot process billing setup because Stripe env vars are not set.",
+                )
+
+            self.assertNotIn(
+                "billing", response_data
+            )  # even if `should_setup_billing=True`
+            instance.refresh_from_db()
+            self.assertEqual(instance.stripe_checkout_session, "")
 

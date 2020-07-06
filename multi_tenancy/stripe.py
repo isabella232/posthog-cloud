@@ -5,16 +5,16 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-stripe.api_key = settings.STRIPE_API_KEY
-
 
 def create_subscription(email, customer_id=""):
 
-    if not stripe.api_key or not settings.STRIPE_GROWTH_PRICE_ID:
+    if not settings.STRIPE_API_KEY or not settings.STRIPE_GROWTH_PRICE_ID:
         logger.warning(
             "Cannot process billing setup because Stripe env vars are not set."
         )
         return None
+
+    stripe.api_key = settings.STRIPE_API_KEY
 
     payload = {
         "payment_method_types": ["card"],
