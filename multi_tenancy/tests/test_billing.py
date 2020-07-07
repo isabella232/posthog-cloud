@@ -342,7 +342,7 @@ class TestTeamBilling(TransactionBaseTest):
 
         invalid_payload_1 = "Not a JSON?"
 
-        invalid_payload_2 = body = """
+        invalid_payload_2 = """
         {
             "data": {
                 "object": {
@@ -367,13 +367,13 @@ class TestTeamBilling(TransactionBaseTest):
         """
 
         for invalid_payload in [invalid_payload_1, invalid_payload_2]:
-            signature = self.generate_webhook_signature(body, sample_webhook_secret)
+            signature = self.generate_webhook_signature(invalid_payload, sample_webhook_secret)
 
             with self.settings(STRIPE_WEBHOOK_SECRET=sample_webhook_secret):
 
                 response = self.client.post(
                     "/billing/stripe_webhook",
-                    body,
+                    invalid_payload,
                     content_type="text/plain",
                     HTTP_STRIPE_SIGNATURE=signature,
                 )
