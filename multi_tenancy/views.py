@@ -1,5 +1,6 @@
+from typing import Dict
 from posthog.urls import render_template
-from django.http import JsonResponse, HttpResponse
+from django.http import JsonResponse, HttpResponse, HttpRequest
 from django.conf import settings
 from django.contrib.auth import login
 from django.shortcuts import redirect
@@ -18,7 +19,7 @@ import posthoganalytics
 logger = logging.getLogger(__name__)
 
 
-def signup_view(request):
+def signup_view(request: HttpRequest):
     if request.method == "GET":
         if request.user.is_authenticated:
             return redirect("/")
@@ -61,7 +62,7 @@ def signup_view(request):
         return redirect("/")
 
 
-def user_with_billing(request):
+def user_with_billing(request: HttpRequest):
     """
     Overrides the posthog.api.user.user response to include
     appropriate billing information in the request
@@ -99,7 +100,7 @@ def user_with_billing(request):
     return response
 
 
-def stripe_checkout_view(request):
+def stripe_checkout_view(request: HttpRequest):
     return render_template(
         "stripe-checkout.html",
         request,
@@ -107,7 +108,7 @@ def stripe_checkout_view(request):
     )
 
 
-def stripe_billing_portal(request):
+def stripe_billing_portal(request: HttpRequest):
 
     if not request.user.is_authenticated:
         return HttpResponse("Unauthorized", status=status.HTTP_401_UNAUTHORIZED)
@@ -124,19 +125,19 @@ def stripe_billing_portal(request):
     return redirect("/")
 
 
-def billing_welcome_view(request):
+def billing_welcome_view(request: HttpRequest):
     return render_template("billing-welcome.html", request)
 
 
-def billing_failed_view(request):
+def billing_failed_view(request: HttpRequest):
     return render_template("billing-failed.html", request)
 
 
-def stripe_webhook(request):
-    response = JsonResponse({"success": True}, status=status.HTTP_200_OK)
-    error_response = JsonResponse({"success": False}, status=status.HTTP_400_BAD_REQUEST)
-    signature = request.META.get("HTTP_STRIPE_SIGNATURE", "")
-    event = parse_webhook(request.read(), signature)
+def stripe_webhook(request: HttpRequest) -> JsonResponse:
+    response: JsonResponse = JsonResponse({"success": True}, status=status.HTTP_200_OK)
+    error_response: JsonResponse = JsonResponse({"success": False}, status=status.HTTP_400_BAD_REQUEST)
+    signature: str = request.META.get("HTTP_STRIPE_SIGNATURE", "")
+    event: Dict = parse_webhook(request.read(), signature)
 
     if event:
         # Event is correctly formed and signature is valid

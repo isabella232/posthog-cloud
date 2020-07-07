@@ -61,7 +61,7 @@ class TestTeamBilling(TransactionBaseTest):
     def test_team_that_should_set_up_billing_gets_an_started_checkout_session(self):
 
         team, user = self.create_team_and_user()
-        instance = TeamBilling.objects.create(team=team, should_setup_billing=True)
+        instance: TeamBilling = TeamBilling.objects.create(team=team, should_setup_billing=True)
         self.client.force_login(user)
 
         with self.assertLogs("multi_tenancy.stripe") as l:
@@ -93,7 +93,7 @@ class TestTeamBilling(TransactionBaseTest):
 
     def test_cannot_start_double_billing_subscription(self):
         team, user = self.create_team_and_user()
-        instance = TeamBilling.objects.create(
+        instance: TeamBilling = TeamBilling.objects.create(
             team=team,
             should_setup_billing=True,
             billing_period_ends=timezone.now()
@@ -110,13 +110,13 @@ class TestTeamBilling(TransactionBaseTest):
     def test_warning_is_logged_if_stripe_variables_are_not_properly_configured(self):
 
         team, user = self.create_team_and_user()
-        instance = TeamBilling.objects.create(team=team, should_setup_billing=True)
+        instance: TeamBilling = TeamBilling.objects.create(team=team, should_setup_billing=True)
         self.client.force_login(user)
 
         with self.settings(STRIPE_GROWTH_PRICE_ID=""):
 
             with self.assertLogs("multi_tenancy.stripe") as l:
-                response_data = self.client.post("/api/user/").json()
+                response_data: Dict = self.client.post("/api/user/").json()
                 self.assertEqual(
                     l.output[0],
                     "WARNING:multi_tenancy.stripe:Cannot process billing setup because env vars are not properly set.",
@@ -131,7 +131,7 @@ class TestTeamBilling(TransactionBaseTest):
         with self.settings(STRIPE_API_KEY=""):
 
             with self.assertLogs("multi_tenancy.stripe") as l:
-                response_data = self.client.post("/api/user/").json()
+                response_data: Dict = self.client.post("/api/user/").json()
                 self.assertEqual(
                     l.output[0],
                     "WARNING:multi_tenancy.stripe:Cannot process billing setup because env vars are not properly set.",
@@ -148,7 +148,7 @@ class TestTeamBilling(TransactionBaseTest):
     def test_user_can_manage_billing(self):
 
         team, user = self.create_team_and_user()
-        instance = TeamBilling.objects.create(
+        instance: TeamBilling = TeamBilling.objects.create(
             team=team, should_setup_billing=True, stripe_customer_id="cus_12345678",
         )
         self.client.force_login(user)
@@ -166,7 +166,7 @@ class TestTeamBilling(TransactionBaseTest):
     def test_user_with_no_billing_set_up_cannot_manage_it(self):
 
         team, user = self.create_team_and_user()
-        instance = TeamBilling.objects.create(team=team, should_setup_billing=True)
+        instance: TeamBilling = TeamBilling.objects.create(team=team, should_setup_billing=True)
         self.client.force_login(user)
 
         response = self.client.post("/billing/manage")
@@ -175,17 +175,17 @@ class TestTeamBilling(TransactionBaseTest):
 
     # Stripe webhooks
 
-    def generate_webhook_signature(self, payload, secret, timestamp=timezone.now()):
-        timestamp = int(timestamp.timestamp())
-        signature = compute_webhook_signature("%d.%s" % (timestamp, payload), secret)
+    def generate_webhook_signature(self, payload: str, secret: str, timestamp: datetime.datetime = timezone.now()) -> str:
+        timestamp: int = int(timestamp.timestamp())
+        signature: str = compute_webhook_signature("%d.%s" % (timestamp, payload), secret)
         return f"t={timestamp},v1={signature}"
 
     def test_billing_period_is_updated_when_webhook_is_received(self):
 
-        sample_webhook_secret = "wh_sec_test_abcdefghijklmnopqrstuvwxyz"
+        sample_webhook_secret: str = "wh_sec_test_abcdefghijklmnopqrstuvwxyz"
 
         team, user = self.create_team_and_user()
-        instance = TeamBilling.objects.create(
+        instance: TeamBilling = TeamBilling.objects.create(
             team=team,
             should_setup_billing=True,
             stripe_customer_id="cus_aEDNOHbSpxHcmq",
@@ -257,7 +257,7 @@ class TestTeamBilling(TransactionBaseTest):
         }
         """
 
-        signature = self.generate_webhook_signature(body, sample_webhook_secret)
+        signature: str = self.generate_webhook_signature(body, sample_webhook_secret)
 
         with self.settings(STRIPE_WEBHOOK_SECRET=sample_webhook_secret):
 
@@ -277,10 +277,10 @@ class TestTeamBilling(TransactionBaseTest):
         )
 
     def test_webhook_with_invalid_signature_fails(self):
-        sample_webhook_secret = "wh_sec_test_abcdefghijklmnopqrstuvwxyz"
+        sample_webhook_secret: str = "wh_sec_test_abcdefghijklmnopqrstuvwxyz"
 
         team, user = self.create_team_and_user()
-        instance = TeamBilling.objects.create(
+        instance: TeamBilling = TeamBilling.objects.create(
             team=team,
             should_setup_billing=True,
             stripe_customer_id="cus_bEDNOHbSpxHcmq",
@@ -310,7 +310,7 @@ class TestTeamBilling(TransactionBaseTest):
         }
         """
 
-        signature = self.generate_webhook_signature(body, sample_webhook_secret)[
+        signature: str = self.generate_webhook_signature(body, sample_webhook_secret)[
             :-1
         ]  # we remove the last character to make it invalid
 
@@ -331,18 +331,18 @@ class TestTeamBilling(TransactionBaseTest):
         self.assertEqual(instance.billing_period_ends, None)
 
     def test_webhook_with_invalid_payload_fails(self):
-        sample_webhook_secret = "wh_sec_test_abcdefghijklmnopqrstuvwxyz"
+        sample_webhook_secret: str = "wh_sec_test_abcdefghijklmnopqrstuvwxyz"
 
         team, user = self.create_team_and_user()
-        instance = TeamBilling.objects.create(
+        instance: TeamBilling = TeamBilling.objects.create(
             team=team,
             should_setup_billing=True,
             stripe_customer_id="cus_dEDNOHbSpxHcmq",
         )
 
-        invalid_payload_1 = "Not a JSON?"
+        invalid_payload_1: str = "Not a JSON?"
 
-        invalid_payload_2 = """
+        invalid_payload_2: str = """
         {
             "data": {
                 "object": {
@@ -367,7 +367,7 @@ class TestTeamBilling(TransactionBaseTest):
         """
 
         for invalid_payload in [invalid_payload_1, invalid_payload_2]:
-            signature = self.generate_webhook_signature(invalid_payload, sample_webhook_secret)
+            signature: str = self.generate_webhook_signature(invalid_payload, sample_webhook_secret)
 
             with self.settings(STRIPE_WEBHOOK_SECRET=sample_webhook_secret):
 
@@ -384,9 +384,9 @@ class TestTeamBilling(TransactionBaseTest):
         self.assertEqual(instance.billing_period_ends, None)
 
     def test_webhook_where_customer_cannot_be_located_is_logged(self):
-        sample_webhook_secret = "wh_sec_test_abcdefghijklmnopqrstuvwxyz"
+        sample_webhook_secret: str = "wh_sec_test_abcdefghijklmnopqrstuvwxyz"
 
-        body = """
+        body: str = """
         {
             "data": {
                 "object": {
@@ -410,7 +410,7 @@ class TestTeamBilling(TransactionBaseTest):
         }
         """
 
-        signature = self.generate_webhook_signature(body, sample_webhook_secret)
+        signature: str = self.generate_webhook_signature(body, sample_webhook_secret)
 
         with self.settings(STRIPE_WEBHOOK_SECRET=sample_webhook_secret):
 

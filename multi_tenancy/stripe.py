@@ -1,3 +1,4 @@
+from typing import Tuple, Dict
 from django.conf import settings
 from django.core.exceptions import ImproperlyConfigured
 import stripe
@@ -6,7 +7,7 @@ import logging
 logger = logging.getLogger(__name__)
 
 
-def create_subscription(email, customer_id=""):
+def create_subscription(email: str, customer_id: str = "") -> Tuple[str, str]:
 
     if not settings.STRIPE_API_KEY or not settings.STRIPE_GROWTH_PRICE_ID:
         logger.warning(
@@ -24,7 +25,7 @@ def create_subscription(email, customer_id=""):
             else "cus_000111222"
         )
 
-    payload = {
+    payload: Dict = {
         "payment_method_types": ["card"],
         "line_items": [{"price": settings.STRIPE_GROWTH_PRICE_ID, "quantity": 1,}],
         "mode": "subscription",
@@ -44,7 +45,7 @@ def create_subscription(email, customer_id=""):
     return (session.id, customer_id)
 
 
-def customer_portal_url(customer_id):
+def customer_portal_url(customer_id: str) -> str:
 
     if not settings.STRIPE_API_KEY:
         logger.warning(
@@ -62,7 +63,7 @@ def customer_portal_url(customer_id):
     return session.url
 
 
-def parse_webhook(payload, signature):
+def parse_webhook(payload: str, signature: str) -> Dict:
 
     if not settings.STRIPE_WEBHOOK_SECRET:
         logger.error(
@@ -75,10 +76,10 @@ def parse_webhook(payload, signature):
         event = stripe.Webhook.construct_event(
             payload, signature, settings.STRIPE_WEBHOOK_SECRET
         )
-    except ValueError as e:
+    except ValueError:
         logger.info(f"Error parsing webhook, unexpected payload. Ignoring. {payload}",)
         return None
-    except stripe.error.SignatureVerificationError as e:
+    except stripe.error.SignatureVerificationError:
         logger.warning(
             f"Ignoring webhook because signature ({signature}) did not match. {payload}",
         )
@@ -86,6 +87,6 @@ def parse_webhook(payload, signature):
     return event
 
 
-def compute_webhook_signature(payload, secret):
+def compute_webhook_signature(payload: str, secret: str) -> str:
     return stripe.webhook.WebhookSignature._compute_signature(payload, secret)
 
