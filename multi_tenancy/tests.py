@@ -1,13 +1,13 @@
 from typing import Dict
-from django.conf import settings
 from django.utils import timezone
 from rest_framework import status
 from posthog.models import User, Team
 from posthog.api.test.base import TransactionBaseTest
 from multi_tenancy.models import TeamBilling
-import multi_tenancy.stripe as multi_tenancy_stripe
+from multi_tenancy.stripe import compute_webhook_signature
 import random
 import datetime
+import pytz
 
 
 class TestTeamBilling(TransactionBaseTest):
@@ -70,8 +70,8 @@ class TestTeamBilling(TransactionBaseTest):
             self.assertEqual(response.status_code, status.HTTP_200_OK)
 
             self.assertIn(
-                user.email, l.output[0]
-            )  # email is included in the simulated payload to Stripe
+                "cus_000111222", l.output[0]
+            )  # customer ID is included in the payload to Stripe
 
         response_data: Dict = response.json()
         self.assertEqual(response_data["billing"]["should_setup_billing"], True)
@@ -119,7 +119,7 @@ class TestTeamBilling(TransactionBaseTest):
                 response_data = self.client.post("/api/user/").json()
                 self.assertEqual(
                     l.output[0],
-                    "WARNING:multi_tenancy.stripe:Cannot process billing setup because Stripe env vars are not set.",
+                    "WARNING:multi_tenancy.stripe:Cannot process billing setup because env vars are not properly set.",
                 )
 
             self.assertNotIn(
@@ -134,7 +134,7 @@ class TestTeamBilling(TransactionBaseTest):
                 response_data = self.client.post("/api/user/").json()
                 self.assertEqual(
                     l.output[0],
-                    "WARNING:multi_tenancy.stripe:Cannot process billing setup because Stripe env vars are not set.",
+                    "WARNING:multi_tenancy.stripe:Cannot process billing setup because env vars are not properly set.",
                 )
 
             self.assertNotIn(
@@ -172,3 +172,257 @@ class TestTeamBilling(TransactionBaseTest):
         response = self.client.post("/billing/manage")
         self.assertEqual(response.status_code, status.HTTP_302_FOUND)
         self.assertEqual(response.url, "/")
+
+    # Stripe webhooks
+
+    def generate_webhook_signature(self, payload, secret, timestamp=timezone.now()):
+        timestamp = int(timestamp.timestamp())
+        signature = compute_webhook_signature("%d.%s" % (timestamp, payload), secret)
+        return f"t={timestamp},v1={signature}"
+
+    def test_billing_period_is_updated_when_webhook_is_received(self):
+
+        sample_webhook_secret = "wh_sec_test_abcdefghijklmnopqrstuvwxyz"
+
+        team, user = self.create_team_and_user()
+        instance = TeamBilling.objects.create(
+            team=team,
+            should_setup_billing=True,
+            stripe_customer_id="cus_aEDNOHbSpxHcmq",
+        )
+
+        # Note that the sample request here does not contain the entire body
+        body = """
+        {
+            "id": "evt_1H2FuICyh3ETxLbCJnSt7FQu",
+            "object": "event",
+            "created": 1594124897,
+            "data": {
+                "object": {
+                    "id": "in_1H2FuFCyh3ETxLbCNarFj00f",
+                    "object": "invoice",
+                    "amount_due": 2900,
+                    "amount_paid": 2900,
+                    "created": 1594124895,
+                    "currency": "usd",
+                    "custom_fields": null,
+                    "customer": "cus_aEDNOHbSpxHcmq",
+                    "customer_email": "user440@posthog.com",
+                    "lines": {
+                        "object": "list",
+                            "data": [
+                            {
+                                "id": "sli_a3c2f4407d4f2f",
+                                "object": "line_item",
+                                "amount": 2900,
+                                "currency": "usd",
+                                "description": "1 × PostHog Growth Plan (at $29.00 / month)",
+                                "period": {
+                                    "end": 1596803295,
+                                    "start": 1594124895
+                                },
+                                "plan": {
+                                    "id": "price_1H1zJPCyh3ETxLbCKup83FE0",
+                                    "object": "plan",
+                                    "nickname": null,
+                                    "product": "prod_HbBgfdauoF2CLh"
+                                },
+                                "price": {
+                                    "id": "price_1H1zJPCyh3ETxLbCKup83FE0",
+                                    "object": "price"
+                                },
+                                "quantity": 1,
+                                "subscription": "sub_HbSp2C2zNDnw1i",
+                                "subscription_item": "si_HbSpBTL6hI03Lp",
+                                "type": "subscription",
+                                "unique_id": "il_1H2FuFCyh3ETxLbCkOq5TZ5O"
+                            }
+                        ],
+                        "has_more": false,
+                        "total_count": 1
+                    },
+                    "next_payment_attempt": null,
+                    "number": "7069031B-0001",
+                    "paid": true,
+                    "payment_intent": "pi_1H2FuFCyh3ETxLbCjv32zPdu",
+                    "period_end": 1594124895,
+                    "period_start": 1594124895,
+                    "status": "paid",
+                    "subscription": "sub_HbSp2C2zNDnw1i"
+                }
+            },
+            "livemode": false,
+            "pending_webhooks": 1,
+            "type": "invoice.payment_succeeded"
+        }
+        """
+
+        signature = self.generate_webhook_signature(body, sample_webhook_secret)
+
+        with self.settings(STRIPE_WEBHOOK_SECRET=sample_webhook_secret):
+
+            response = self.client.post(
+                "/billing/stripe_webhook",
+                body,
+                content_type="text/plain",
+                HTTP_STRIPE_SIGNATURE=signature,
+            )
+            self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+        # Check that the period end was updated
+        instance.refresh_from_db()
+        self.assertEqual(
+            instance.billing_period_ends,
+            datetime.datetime(2020, 8, 7, 12, 28, 15, tzinfo=pytz.UTC),
+        )
+
+    def test_webhook_with_invalid_signature_fails(self):
+        sample_webhook_secret = "wh_sec_test_abcdefghijklmnopqrstuvwxyz"
+
+        team, user = self.create_team_and_user()
+        instance = TeamBilling.objects.create(
+            team=team,
+            should_setup_billing=True,
+            stripe_customer_id="cus_bEDNOHbSpxHcmq",
+        )
+
+        body = """
+        {
+            "data": {
+                "object": {
+                    "id": "in_1H2FuFCyh3ETxLbCNarFj00f",
+                    "customer": "cus_bEDNOHbSpxHcmq",
+                    "lines": {
+                        "object": "list",
+                        "data": [
+                            {
+                                "period": {
+                                    "end": 1596803295,
+                                    "start": 1594124895
+                                }
+                            }
+                        ]
+                    }
+                }
+            },
+            "pending_webhooks": 1,
+            "type": "invoice.payment_succeeded"
+        }
+        """
+
+        signature = self.generate_webhook_signature(body, sample_webhook_secret)[
+            :-1
+        ]  # we remove the last character to make it invalid
+
+        with self.settings(STRIPE_WEBHOOK_SECRET=sample_webhook_secret):
+
+            with self.assertLogs(logger="multi_tenancy.stripe") as l:
+                response = self.client.post(
+                    "/billing/stripe_webhook",
+                    body,
+                    content_type="text/plain",
+                    HTTP_STRIPE_SIGNATURE=signature,
+                )
+                self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+                self.assertIn("Ignoring webhook because signature", l.output[0])
+
+        # Check that the period end was NOT updated
+        instance.refresh_from_db()
+        self.assertEqual(instance.billing_period_ends, None)
+
+    def test_webhook_with_invalid_payload_fails(self):
+        sample_webhook_secret = "wh_sec_test_abcdefghijklmnopqrstuvwxyz"
+
+        team, user = self.create_team_and_user()
+        instance = TeamBilling.objects.create(
+            team=team,
+            should_setup_billing=True,
+            stripe_customer_id="cus_dEDNOHbSpxHcmq",
+        )
+
+        invalid_payload_1 = "Not a JSON?"
+
+        invalid_payload_2 = body = """
+        {
+            "data": {
+                "object": {
+                    "id": "in_1H2FuFCyh3ETxLbCNarFj00f",
+                    "customer_UNEXPECTED_KEY": "cus_dEDNOHbSpxHcmq",
+                    "lines": {
+                        "object": "list",
+                        "data": [
+                            {
+                                "period": {
+                                    "end": 1596803295,
+                                    "start": 1594124895
+                                }
+                            }
+                        ]
+                    }
+                }
+            },
+            "pending_webhooks": 1,
+            "type": "invoice.payment_succeeded"
+        }
+        """
+
+        for invalid_payload in [invalid_payload_1, invalid_payload_2]:
+            signature = self.generate_webhook_signature(body, sample_webhook_secret)
+
+            with self.settings(STRIPE_WEBHOOK_SECRET=sample_webhook_secret):
+
+                response = self.client.post(
+                    "/billing/stripe_webhook",
+                    body,
+                    content_type="text/plain",
+                    HTTP_STRIPE_SIGNATURE=signature,
+                )
+                self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+        # Check that the period end was NOT updated
+        instance.refresh_from_db()
+        self.assertEqual(instance.billing_period_ends, None)
+
+    def test_webhook_where_customer_cannot_be_located_is_logged(self):
+        sample_webhook_secret = "wh_sec_test_abcdefghijklmnopqrstuvwxyz"
+
+        body = """
+        {
+            "data": {
+                "object": {
+                    "id": "in_1H2FuFCyh3ETxLbCNarFj00f",
+                    "customer": "cus_12345678",
+                    "lines": {
+                        "object": "list",
+                        "data": [
+                            {
+                                "period": {
+                                    "end": 1596803295,
+                                    "start": 1594124895
+                                }
+                            }
+                        ]
+                    }
+                }
+            },
+            "pending_webhooks": 1,
+            "type": "invoice.payment_succeeded"
+        }
+        """
+
+        signature = self.generate_webhook_signature(body, sample_webhook_secret)
+
+        with self.settings(STRIPE_WEBHOOK_SECRET=sample_webhook_secret):
+
+            with self.assertLogs(logger="multi_tenancy.views") as l:
+                response = self.client.post(
+                    "/billing/stripe_webhook",
+                    body,
+                    content_type="text/plain",
+                    HTTP_STRIPE_SIGNATURE=signature,
+                )
+                self.assertEqual(response.status_code, status.HTTP_200_OK)
+                self.assertIn(
+                    "Received invoice.payment_succeeded for cus_12345678 but customer is not in the database.",
+                    l.output[0],
+                )

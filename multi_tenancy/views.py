@@ -2,13 +2,20 @@ from posthog.urls import render_template
 from django.http import JsonResponse, HttpResponse
 from django.conf import settings
 from django.contrib.auth import login
-from posthog.models import User, Team
 from django.shortcuts import redirect
+from rest_framework import status
+from rest_framework import exceptions
+from posthog.models import User, Team
 from posthog.api.user import user
 from multi_tenancy.models import TeamBilling
-from multi_tenancy.stripe import create_subscription, customer_portal_url
+from multi_tenancy.stripe import create_subscription, customer_portal_url, parse_webhook
 import json
+import logging
+import datetime
+import pytz
 import posthoganalytics
+
+logger = logging.getLogger(__name__)
 
 
 def signup_view(request):
@@ -103,7 +110,7 @@ def stripe_checkout_view(request):
 def stripe_billing_portal(request):
 
     if not request.user.is_authenticated:
-        return HttpResponse("Unauthorized", status=401)
+        return HttpResponse("Unauthorized", status=status.HTTP_401_UNAUTHORIZED)
 
     instance, created = TeamBilling.objects.get_or_create(
         team=request.user.team_set.first()
@@ -123,3 +130,49 @@ def billing_welcome_view(request):
 
 def billing_failed_view(request):
     return render_template("billing-failed.html", request)
+
+
+def stripe_webhook(request):
+    response = JsonResponse({"success": True}, status=status.HTTP_200_OK)
+    error_response = JsonResponse({"success": False}, status=status.HTTP_400_BAD_REQUEST)
+    signature = request.META.get("HTTP_STRIPE_SIGNATURE", "")
+    event = parse_webhook(request.read(), signature)
+
+    if event:
+        # Event is correctly formed and signature is valid
+
+        try:
+
+            if event["type"] == "invoice.payment_succeeded":
+                customer_id = event["data"]["object"]["customer"]
+
+                try:
+                    instance = TeamBilling.objects.get(stripe_customer_id=customer_id)
+                except TeamBilling.DoesNotExist:
+                    logger.warning(
+                        f"Received invoice.payment_succeeded for {customer_id} but customer is not in the database."
+                    )
+                    return response
+
+                # We have to use the period from the invoice line items because on the first month
+                # Stripe sets period_end = period_start because they manage these attributes on an accrual-basis
+                line_items = event["data"]["object"]["lines"]["data"]
+                if len(line_items) > 1:
+                    logger.warning(
+                        f"Stripe's invoice.payment_succeeded webhook contained more than 1 line item ({event}), using the first one."
+                    )
+
+                instance.billing_period_ends = datetime.datetime.utcfromtimestamp(
+                    line_items[0]["period"]["end"]
+                ).replace(tzinfo=pytz.utc)
+                instance.save()
+
+        except KeyError:
+            # Malformed request
+            return error_response
+    
+    else:
+        return error_response
+
+    return response
+

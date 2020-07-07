@@ -10,7 +10,7 @@ def create_subscription(email, customer_id=""):
 
     if not settings.STRIPE_API_KEY or not settings.STRIPE_GROWTH_PRICE_ID:
         logger.warning(
-            "Cannot process billing setup because Stripe env vars are not set."
+            "Cannot process billing setup because env vars are not properly set."
         )
         return (None, None)
 
@@ -48,7 +48,7 @@ def customer_portal_url(customer_id):
 
     if not settings.STRIPE_API_KEY:
         logger.warning(
-            "Cannot process billing management because Stripe API key is not set."
+            "Cannot process billing management because env vars are not properly set."
         )
         return None
 
@@ -60,4 +60,32 @@ def customer_portal_url(customer_id):
     session = stripe.billing_portal.Session.create(customer=customer_id,)
 
     return session.url
+
+
+def parse_webhook(payload, signature):
+
+    if not settings.STRIPE_WEBHOOK_SECRET:
+        logger.error(
+            "Cannot process Stripe webhook because env vars are not properly set."
+        )
+        return None
+
+    event = None
+    try:
+        event = stripe.Webhook.construct_event(
+            payload, signature, settings.STRIPE_WEBHOOK_SECRET
+        )
+    except ValueError as e:
+        logger.info(f"Error parsing webhook, unexpected payload. Ignoring. {payload}",)
+        return None
+    except stripe.error.SignatureVerificationError as e:
+        logger.warning(
+            f"Ignoring webhook because signature ({signature}) did not match. {payload}",
+        )
+        return None
+    return event
+
+
+def compute_webhook_signature(payload, secret):
+    return stripe.webhook.WebhookSignature._compute_signature(payload, secret)
 

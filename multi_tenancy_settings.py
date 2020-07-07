@@ -23,5 +23,5 @@ if (
 
 STRIPE_API_KEY = os.environ.get("STRIPE_API_KEY", "")
 STRIPE_PUBLISHABLE_KEY = os.environ.get("STRIPE_PUBLISHABLE_KEY", "")
+STRIPE_WEBHOOK_SECRET = os.environ.get("STRIPE_WEBHOOK_SECRET", "")
 STRIPE_GROWTH_PRICE_ID = os.environ.get("STRIPE_GROWTH_PRICE_ID", "")
-
