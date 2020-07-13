@@ -4,4 +4,4 @@ curl -L https://github.com/posthog/posthog/tarball/master | tar --strip-componen
 cp -r multi_tenancy deploy/
 
 cat multi_tenancy_settings.py >> deploy/posthog/settings.py
-cat "requirements.txt >> deploy/requirements.txt
+cat requirements.txt >> deploy/requirements.txt
