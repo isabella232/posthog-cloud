@@ -10,6 +10,4 @@ We pull in our main repo using the script into the `/deploy` folder. We then cop
 
 ## Developing locally
 
-1. Run `bin/develop_posthog`
-2. Follow [these instructions](https://posthog.com/docs/developing-locally), but cd into `deploy/` to be able to run `bin/start`
-3. You can now edit `/settings.py` or any files in `multi_tenancy`. They're automatically linked to `/deploy`.
+1. Run `docker-compose -f docker-compose.dev.yml up`
