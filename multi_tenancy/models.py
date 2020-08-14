@@ -14,6 +14,7 @@ class TeamBilling(models.Model):
     billing_period_ends: models.DateTimeField = models.DateTimeField(
         null=True, blank=True, default=None
     )
+    custom_price_id: models.CharField = models.CharField(max_length=128, blank=True)
 
     @property
     def is_billing_active(self):

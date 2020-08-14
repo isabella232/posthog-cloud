@@ -1,5 +1,6 @@
 from typing import Dict
 from django.utils import timezone
+from django.conf import settings
 from rest_framework import status
 from posthog.models import User, Team
 from posthog.api.test.base import TransactionBaseTest
@@ -61,7 +62,9 @@ class TestTeamBilling(TransactionBaseTest):
     def test_team_that_should_set_up_billing_gets_an_started_checkout_session(self):
 
         team, user = self.create_team_and_user()
-        instance: TeamBilling = TeamBilling.objects.create(team=team, should_setup_billing=True)
+        instance: TeamBilling = TeamBilling.objects.create(
+            team=team, should_setup_billing=True
+        )
         self.client.force_login(user)
 
         with self.assertLogs("multi_tenancy.stripe") as l:
@@ -70,13 +73,55 @@ class TestTeamBilling(TransactionBaseTest):
             self.assertEqual(response.status_code, status.HTTP_200_OK)
 
             self.assertIn(
-                "cus_000111222", l.output[0]
+                "cus_000111222", l.output[0],
             )  # customer ID is included in the payload to Stripe
+
+            self.assertIn(
+                settings.STRIPE_GROWTH_PRICE_ID, l.output[0],
+            )  # Default price is used
 
         response_data: Dict = response.json()
         self.assertEqual(response_data["billing"]["should_setup_billing"], True)
         self.assertEqual(
-            response_data["billing"]["stripe_checkout_session"], "cs_1234567890"
+            response_data["billing"]["stripe_checkout_session"], "cs_1234567890",
+        )
+        self.assertEqual(
+            response_data["billing"]["subscription_url"],
+            "/billing/setup?session_id=cs_1234567890",
+        )
+
+        # Check that the checkout session was saved to the database
+        instance.refresh_from_db()
+        self.assertEqual(
+            instance.stripe_checkout_session,
+            response_data["billing"]["stripe_checkout_session"],
+        )
+        self.assertEqual(instance.stripe_customer_id, "cus_000111222")
+
+    def test_team_with_custom_pricing(self):
+        """
+        Team has a `custom_price_id` and therefore is billed differently.
+        """
+
+        team, user = self.create_team_and_user()
+        instance: TeamBilling = TeamBilling.objects.create(
+            team=team, should_setup_billing=True, custom_price_id="price_custom_123",
+        )
+        self.client.force_login(user)
+
+        with self.assertLogs("multi_tenancy.stripe") as l:
+
+            response = self.client.post("/api/user/")
+            self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+            self.assertIn(
+                "price_custom_123", l.output[0],
+            )  # Custom price ID is used
+
+        response_data: Dict = response.json()
+        self.assertEqual(response_data["billing"]["should_setup_billing"], True)
+        self.assertEqual(
+            response_data["billing"]["stripe_checkout_session"], "cs_1234567890",
         )
         self.assertEqual(
             response_data["billing"]["subscription_url"],
@@ -110,7 +155,9 @@ class TestTeamBilling(TransactionBaseTest):
     def test_warning_is_logged_if_stripe_variables_are_not_properly_configured(self):
 
         team, user = self.create_team_and_user()
-        instance: TeamBilling = TeamBilling.objects.create(team=team, should_setup_billing=True)
+        instance: TeamBilling = TeamBilling.objects.create(
+            team=team, should_setup_billing=True
+        )
         self.client.force_login(user)
 
         with self.settings(STRIPE_GROWTH_PRICE_ID=""):
@@ -166,7 +213,9 @@ class TestTeamBilling(TransactionBaseTest):
     def test_user_with_no_billing_set_up_cannot_manage_it(self):
 
         team, user = self.create_team_and_user()
-        instance: TeamBilling = TeamBilling.objects.create(team=team, should_setup_billing=True)
+        instance: TeamBilling = TeamBilling.objects.create(
+            team=team, should_setup_billing=True
+        )
         self.client.force_login(user)
 
         response = self.client.post("/billing/manage")
@@ -175,9 +224,13 @@ class TestTeamBilling(TransactionBaseTest):
 
     # Stripe webhooks
 
-    def generate_webhook_signature(self, payload: str, secret: str, timestamp: datetime.datetime = timezone.now()) -> str:
+    def generate_webhook_signature(
+        self, payload: str, secret: str, timestamp: datetime.datetime = timezone.now()
+    ) -> str:
         timestamp: int = int(timestamp.timestamp())
-        signature: str = compute_webhook_signature("%d.%s" % (timestamp, payload), secret)
+        signature: str = compute_webhook_signature(
+            "%d.%s" % (timestamp, payload), secret
+        )
         return f"t={timestamp},v1={signature}"
 
     def test_billing_period_is_updated_when_webhook_is_received(self):
@@ -367,7 +420,9 @@ class TestTeamBilling(TransactionBaseTest):
         """
 
         for invalid_payload in [invalid_payload_1, invalid_payload_2]:
-            signature: str = self.generate_webhook_signature(invalid_payload, sample_webhook_secret)
+            signature: str = self.generate_webhook_signature(
+                invalid_payload, sample_webhook_secret
+            )
 
             with self.settings(STRIPE_WEBHOOK_SECRET=sample_webhook_secret):
 
