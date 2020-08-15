@@ -318,6 +318,7 @@ class TestTeamBilling(TransactionBaseTest):
             instance.billing_period_ends,
             datetime.datetime(2020, 8, 7, 12, 28, 15, tzinfo=pytz.UTC),
         )
+        self.assertEqual(instance.price_id, "price_1H1zJPCyh3ETxLbCKup83FE0")
 
     def test_webhook_with_invalid_signature_fails(self):
         sample_webhook_secret: str = "wh_sec_test_abcdefghijklmnopqrstuvwxyz"
@@ -369,9 +370,10 @@ class TestTeamBilling(TransactionBaseTest):
                 self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
                 self.assertIn("Ignoring webhook because signature", l.output[0])
 
-        # Check that the period end was NOT updated
+        # Check that the period end & price ID was NOT updated
         instance.refresh_from_db()
         self.assertEqual(instance.billing_period_ends, None)
+        self.assertEqual(instance.price_id, "")
 
     def test_webhook_with_invalid_payload_fails(self):
         sample_webhook_secret: str = "wh_sec_test_abcdefghijklmnopqrstuvwxyz"

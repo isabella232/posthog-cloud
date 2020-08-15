@@ -166,6 +166,10 @@ def stripe_webhook(request: HttpRequest) -> JsonResponse:
                 instance.billing_period_ends = datetime.datetime.utcfromtimestamp(
                     line_items[0]["period"]["end"]
                 ).replace(tzinfo=pytz.utc)
+
+                # Update the price_id too.
+                instance.price_id = line_items[0]["price"]["id"]
+
                 instance.save()
 
         except KeyError:
