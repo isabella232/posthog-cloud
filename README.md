@@ -1,4 +1,4 @@
-# PostHog production
+# PostHog multi-tenancy
 
 This repository is used to run our own production cluster of PostHog (app.posthog.com). It enables anyone to sign up to an account and create a new team, 
 
@@ -10,10 +10,16 @@ We pull in our main repo using the script into the `/deploy` folder. We then cop
 
 ## Developing locally
 
-1. Run `bin/develop_posthog`
-1. Follow [these instructions](https://posthog.com/docs/developing-locally), but cd into `deploy/` to be able to run `bin/start`
-1. You can now edit `/settings.py` or any files in `multi_tenancy`. They're automatically linked to `/deploy`.
+> To develop locally with Docker follow the instructions on `https://posthog.com/docs/developing-locally` (do not forget to load the relevant environment variables and run `bin/develop_posthog`)
 
-### Developing locally with docker
+1. Set up a virtual environment (sample code below).
+    ```bash
+    python3 -m venv env
+    ```
+1. Run `bin/develop_posthog`.
+1. Load the sample environment variables on `env.template`.
+1. cd into `deploy/` and run `bin/start` (this will pre-compile the front-end too).
+1. Tests can be run using `DEBUG=1 bin/tests`.
 
-1. Run `docker-compose -f docker-compose.dev.yml up`
+
+You may now edit `/settings.py` or any files in `multi_tenancy`. They're automatically linked to the `/deploy` folder.
