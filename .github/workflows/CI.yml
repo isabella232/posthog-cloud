@@ -34,12 +34,17 @@ jobs:
           cd deploy
           python -m pip install --upgrade pip
           python -m pip install -r requirements.txt
+          python -m pip install -r requirements/dev.txt
         if: steps.cache.outputs.cache-hit != 'true'
       - name: Run tests
+        env:
+          DATABASE_URL: 'postgres://postgres:postgres@localhost:5432/postgres'
+          REDIS_URL: 'redis://localhost'
         run: |
           export $(<env.template)
+          cd deploy
           mkdir -p frontend/dist
           touch frontend/dist/index.html
           touch frontend/dist/layout.html
           touch frontend/dist/shared_dashboard.html
-          python manage.py test --keepdb -v 2
+          python manage.py test -v 2
