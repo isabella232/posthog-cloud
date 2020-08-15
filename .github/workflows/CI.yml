@@ -1,0 +1,45 @@
+name: CI
+
+on: [pull_request]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:12
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: postgres
+        ports: ['5432:5432']
+        options: --health-cmd pg_isready --health-interval 10s --health-timeout 5s --health-retries 5
+    steps:
+      - uses: actions/checkout@v2
+      - name: Set up Python 3.x
+        uses: actions/setup-python@v2
+        with:
+          python-version: '3.x'
+      - name: Fetch posthog main repo
+        run: bin/pull_posthog
+      - name: Set up dependencies caching
+        uses: actions/cache@v2
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
+      - name: Install dependencies
+        run: |
+          cd deploy
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
+        if: steps.cache.outputs.cache-hit != 'true'
+      - name: Run tests
+        run: |
+          export $(<env.template)
+          mkdir -p frontend/dist
+          touch frontend/dist/index.html
+          touch frontend/dist/layout.html
+          touch frontend/dist/shared_dashboard.html
+          python manage.py test --keepdb -v 2
