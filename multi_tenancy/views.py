@@ -79,7 +79,7 @@ def user_with_billing(request: HttpRequest):
         if instance.should_setup_billing and not instance.is_billing_active:
 
             checkout_session, customer_id = create_subscription(
-                request.user.email, instance.stripe_customer_id
+                request.user.email, instance.stripe_customer_id, instance.price_id,
             )
 
             if checkout_session:
@@ -166,6 +166,10 @@ def stripe_webhook(request: HttpRequest) -> JsonResponse:
                 instance.billing_period_ends = datetime.datetime.utcfromtimestamp(
                     line_items[0]["period"]["end"]
                 ).replace(tzinfo=pytz.utc)
+
+                # Update the price_id too.
+                instance.price_id = line_items[0]["price"]["id"]
+
                 instance.save()
 
         except KeyError:

@@ -1,7 +1,7 @@
 from django.db import models
+from django.conf import settings
 from django.utils import timezone
 from posthog.models.team import Team
-
 
 class TeamBilling(models.Model):
 
@@ -14,6 +14,7 @@ class TeamBilling(models.Model):
     billing_period_ends: models.DateTimeField = models.DateTimeField(
         null=True, blank=True, default=None
     )
+    price_id: models.CharField = models.CharField(max_length=128, blank=True, default="")
 
     @property
     def is_billing_active(self):
