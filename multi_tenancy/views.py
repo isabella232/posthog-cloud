@@ -132,6 +132,8 @@ def billing_welcome_view(request: HttpRequest):
 def billing_failed_view(request: HttpRequest):
     return render_template("billing-failed.html", request)
 
+def billing_hosted_view(request: HttpRequest):
+    return render_template("billing-hosted.html", request)
 
 def stripe_webhook(request: HttpRequest) -> JsonResponse:
     response: JsonResponse = JsonResponse({"success": True}, status=status.HTTP_200_OK)
