@@ -8,6 +8,7 @@ from multi_tenancy.views import (
     stripe_billing_portal,
     billing_welcome_view,
     billing_failed_view,
+    billing_hosted_view,
     stripe_webhook,
 )
 
@@ -32,6 +33,9 @@ urlpatterns += [
     path(
         "billing/failed", billing_failed_view, name="billing_failed"
     ),  # Page with failure message after attempting to set up billing
+    path(
+        "billing/hosted", billing_hosted_view, name="billing_hosted"
+    ),  # Page with success message after setting up billing for hosted plans
     path(
         "billing/stripe_webhook", stripe_webhook, name="billing_stripe_webhook"
     ),  # Stripe Webhook
