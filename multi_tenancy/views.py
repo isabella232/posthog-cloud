@@ -10,28 +10,28 @@ from django.http import HttpRequest, HttpResponse, JsonResponse
 from django.shortcuts import redirect
 from django.utils import timezone
 from django.views.decorators.csrf import csrf_exempt
+from posthog.api.team import TeamSignupViewset
+from posthog.api.user import user
+from posthog.urls import render_template
 from rest_framework import status
 from sentry_sdk import capture_exception, capture_message
 
 import stripe
-from multi_tenancy.models import TeamBilling
+from multi_tenancy.models import OrganizationBilling
 from multi_tenancy.serializers import PlanSerializer
 from multi_tenancy.stripe import (
     cancel_payment_intent,
     customer_portal_url,
     parse_webhook,
 )
-from posthog.api.team import TeamSignupViewset
-from posthog.api.user import user
-from posthog.urls import render_template
 
-from .serializers import MultiTenancyTeamSignupSerializer
+from .serializers import MultiTenancyOrgSignupSerializer
 
 logger = logging.getLogger(__name__)
 
 
-class MultiTenancyTeamSignupViewset(TeamSignupViewset):
-    serializer_class = MultiTenancyTeamSignupSerializer
+class MultiTenancyOrgSignupViewset(TeamSignupViewset):
+    serializer_class = MultiTenancyOrgSignupSerializer
 
 
 def user_with_billing(request: HttpRequest):
@@ -43,9 +43,9 @@ def user_with_billing(request: HttpRequest):
     response = user(request)
 
     if response.status_code == 200:
-        # TO-DO (Future): Handle user having multiple teams
-        instance, created = TeamBilling.objects.get_or_create(
-            team=request.user.team_set.first(),
+        # TODO: Handle multiple organizations
+        instance, created = OrganizationBilling.objects.get_or_create(
+            organization=request.user.organization,
         )
 
         if instance.plan:
@@ -62,7 +62,7 @@ def user_with_billing(request: HttpRequest):
                     instance.stripe_checkout_session
                     and instance.checkout_session_created_at
                     and instance.checkout_session_created_at
-                    + datetime.timedelta(minutes=1439)
+                    + timezone.timedelta(minutes=1439)
                     > timezone.now()
                 ):
                     # Checkout session has been created and is still active (i.e. created less than 24 hours ago)
@@ -81,14 +81,13 @@ def user_with_billing(request: HttpRequest):
                     except ImproperlyConfigured as e:
                         capture_exception(e)
                         checkout_session = None
-
-                    if checkout_session:
-
-                        TeamBilling.objects.filter(pk=instance.pk).update(
-                            stripe_checkout_session=checkout_session,
-                            stripe_customer_id=customer_id,
-                            checkout_session_created_at=timezone.now(),
-                        )
+                    else:
+                        if checkout_session:
+                            OrganizationBilling.objects.filter(pk=instance.pk).update(
+                                stripe_checkout_session=checkout_session,
+                                stripe_customer_id=customer_id,
+                                checkout_session_created_at=timezone.now(),
+                            )
 
                 if checkout_session:
                     output["billing"] = {
@@ -116,8 +115,8 @@ def stripe_billing_portal(request: HttpRequest):
     if not request.user.is_authenticated:
         return HttpResponse("Unauthorized", status=status.HTTP_401_UNAUTHORIZED)
 
-    instance, created = TeamBilling.objects.get_or_create(
-        team=request.user.team_set.first()
+    instance, created = OrganizationBilling.objects.get_or_create(
+        organization=request.user.organization,
     )
 
     if instance.stripe_customer_id:
@@ -134,11 +133,12 @@ def billing_welcome_view(request: HttpRequest):
 
     if session_id:
         try:
-            team_billing = TeamBilling.objects.get(stripe_checkout_session=session_id)
-        except TeamBilling.DoesNotExist:
+            team_billing = OrganizationBilling.objects.get(
+                stripe_checkout_session=session_id,
+            )
+        except OrganizationBilling.DoesNotExist:
             pass
-
-        if team_billing:
+        else:
             serializer = PlanSerializer()
             extra_args["plan"] = serializer.to_representation(team_billing.plan)
             extra_args["billing_period_ends"] = team_billing.billing_period_ends
@@ -172,8 +172,8 @@ def stripe_webhook(request: HttpRequest) -> JsonResponse:
         customer_id = event["data"]["object"]["customer"]
 
         try:
-            instance = TeamBilling.objects.get(stripe_customer_id=customer_id)
-        except TeamBilling.DoesNotExist:
+            instance = OrganizationBilling.objects.get(stripe_customer_id=customer_id)
+        except OrganizationBilling.DoesNotExist:
             capture_message(
                 f"Received invoice.payment_succeeded for {customer_id} but customer is not in the database.",
             )
@@ -198,9 +198,7 @@ def stripe_webhook(request: HttpRequest) -> JsonResponse:
         # Special handling for plans that only do card validation (e.g. startup);
         # default behavior is setting the plan for 1 year from registration.
         elif event["type"] == "payment_intent.amount_capturable_updated":
-            instance.billing_period_ends = (
-                instance.team.created_at + datetime.timedelta(days=365)
-            )
+            instance.billing_period_ends = timezone.now() + datetime.timedelta(days=365)
             instance.save()
 
             # Attempt to cancel the validation charge
