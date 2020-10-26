@@ -1,7 +1,8 @@
 import datetime
 import json
 import logging
-from typing import Dict
+from distutils.util import strtobool
+from typing import Dict, Optional
 
 import pytz
 from django.conf import settings
@@ -12,26 +13,46 @@ from django.utils import timezone
 from django.views.decorators.csrf import csrf_exempt
 from posthog.api.team import TeamSignupViewset
 from posthog.api.user import user
+from posthog.templatetags.posthog_filters import compact_number
 from posthog.urls import render_template
-from rest_framework import status
+from rest_framework import mixins, status
+from rest_framework.viewsets import GenericViewSet, ModelViewSet
 from sentry_sdk import capture_exception, capture_message
 
 import stripe
-from multi_tenancy.models import OrganizationBilling
-from multi_tenancy.serializers import PlanSerializer
-from multi_tenancy.stripe import (
-    cancel_payment_intent,
-    customer_portal_url,
-    parse_webhook,
-)
 
-from .serializers import MultiTenancyOrgSignupSerializer
+from .models import OrganizationBilling, Plan
+from .serializers import (
+    BillingSubscribeSerializer,
+    MultiTenancyOrgSignupSerializer,
+    PlanSerializer,
+)
+from .stripe import cancel_payment_intent, customer_portal_url, parse_webhook
+from .utils import get_cached_monthly_event_usage
 
 logger = logging.getLogger(__name__)
 
 
 class MultiTenancyOrgSignupViewset(TeamSignupViewset):
     serializer_class = MultiTenancyOrgSignupSerializer
+
+
+class PlanViewset(ModelViewSet):
+    serializer_class = PlanSerializer
+    lookup_field = "key"
+
+    def get_queryset(self):
+        queryset = Plan.objects.filter(is_active=True)
+
+        self_serve: Optional[str] = self.request.query_params.get("self_serve", None)
+        if self_serve is not None:
+            queryset = queryset.filter(self_serve=bool(strtobool(self_serve)))
+
+        return queryset
+
+
+class BillingSubscribeViewset(mixins.CreateModelMixin, GenericViewSet):
+    serializer_class = BillingSubscribeSerializer
 
 
 def user_with_billing(request: HttpRequest):
@@ -44,17 +65,25 @@ def user_with_billing(request: HttpRequest):
 
     if response.status_code == 200:
         # TODO: Handle multiple organizations
-        instance, created = OrganizationBilling.objects.get_or_create(
+        instance, _created = OrganizationBilling.objects.get_or_create(
             organization=request.user.organization,
         )
 
-        if instance.plan:
+        output = json.loads(response.content)
+        event_usage: int = get_cached_monthly_event_usage(request.user.organization)
+        output["billing"] = {
+            "plan": None,
+            "current_usage": {
+                "value": event_usage,
+                "formatted": compact_number(event_usage),
+            },
+        }
 
+        if instance.plan:
             plan_serializer = PlanSerializer()
-            output = json.loads(response.content)
-            output["billing"] = {
-                "plan": plan_serializer.to_representation(instance=instance.plan),
-            }
+            output["billing"]["plan"] = plan_serializer.to_representation(
+                instance=instance.plan,
+            )
 
             if instance.should_setup_billing and not instance.is_billing_active:
 
@@ -97,7 +126,7 @@ def user_with_billing(request: HttpRequest):
                         "subscription_url": f"/billing/setup?session_id={checkout_session}",
                     }
 
-            response = JsonResponse(output)
+        response = JsonResponse(output)
 
     return response
 
@@ -192,6 +221,7 @@ def stripe_webhook(request: HttpRequest) -> JsonResponse:
             instance.billing_period_ends = datetime.datetime.utcfromtimestamp(
                 line_items[0]["period"]["end"],
             ).replace(tzinfo=pytz.utc)
+            instance.should_setup_billing = False
 
             instance.save()
 
@@ -199,6 +229,7 @@ def stripe_webhook(request: HttpRequest) -> JsonResponse:
         # default behavior is setting the plan for 1 year from registration.
         elif event["type"] == "payment_intent.amount_capturable_updated":
             instance.billing_period_ends = timezone.now() + datetime.timedelta(days=365)
+            instance.should_setup_billing = False
             instance.save()
 
             # Attempt to cancel the validation charge

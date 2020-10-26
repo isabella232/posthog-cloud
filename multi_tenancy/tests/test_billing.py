@@ -1,17 +1,18 @@
 import datetime
 import random
-from time import time
 from typing import Dict
 from unittest.mock import MagicMock, patch
 
 import pytz
+from django.core.cache import cache
 from django.core.exceptions import ValidationError
 from django.test import Client
 from django.utils import timezone
+from freezegun import freeze_time
 from multi_tenancy.models import OrganizationBilling, Plan
 from multi_tenancy.stripe import compute_webhook_signature
-from posthog.api.test.base import BaseTest, TransactionBaseTest
-from posthog.models import Team, User
+from posthog.api.test.base import APIBaseTest, BaseTest, TransactionBaseTest
+from posthog.models import Event, User
 from rest_framework import status
 
 
@@ -29,11 +30,14 @@ class TestPlan(BaseTest):
             },
         )
 
+    def test_plan_has_unlimited_event_allowance_by_default(self):
+        plan = Plan.objects.create(
+            key="test_plan", name="Test Plan", price_id="price_test"
+        )
+        self.assertEqual(plan.event_allowance, None)
 
-class TestOrganizationBilling(TransactionBaseTest):
 
-    TESTS_API = True
-
+class PlanTestMixin:
     def create_org_team_user(self):
         return User.objects.bootstrap(
             company_name="Z",
@@ -53,6 +57,11 @@ class TestOrganizationBilling(TransactionBaseTest):
             },
         )
 
+
+class TestOrganizationBilling(TransactionBaseTest, PlanTestMixin):
+
+    TESTS_API = True
+
     # Setting up billing
 
     def test_team_should_not_set_up_billing_by_default(self):
@@ -62,35 +71,40 @@ class TestOrganizationBilling(TransactionBaseTest):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
 
         response_data: Dict = response.json()
-        self.assertNotIn(
-            "billing", response_data,
-        )  # key should not be present if plan = `None`
+        self.assertEqual(
+            response_data["billing"],
+            {"plan": None, "current_usage": {"formatted": "0", "value": 0}},
+        )
 
         # OrganizationBilling object should've been created if non-existent
         self.assertEqual(OrganizationBilling.objects.count(), count + 1)
-        team_billing: OrganizationBilling = OrganizationBilling.objects.get(
-            organization=self.organization
+        org_billing: OrganizationBilling = OrganizationBilling.objects.get(
+            organization=self.organization,
         )
 
         # Test default values for OrganizationBilling
-        self.assertEqual(team_billing.should_setup_billing, False)
-        self.assertEqual(team_billing.stripe_customer_id, "")
-        self.assertEqual(team_billing.stripe_checkout_session, "")
+        self.assertEqual(org_billing.should_setup_billing, False)
+        self.assertEqual(org_billing.stripe_customer_id, "")
+        self.assertEqual(org_billing.stripe_checkout_session, "")
 
     def test_team_that_should_not_set_up_billing(self):
         organization, team, user = self.create_org_team_user()
         OrganizationBilling.objects.create(
-            organization=organization, should_setup_billing=False
+            organization=organization, should_setup_billing=False,
         )
         self.client.force_login(user)
+
+        for _ in range(0, 3):
+            Event.objects.create(team=team)
 
         response = self.client.post("/api/user/")
         self.assertEqual(response.status_code, status.HTTP_200_OK)
 
         response_data: Dict = response.json()
-        self.assertNotIn(
-            "billing", response_data,
-        )  # key should not be present if plan = `None`
+        self.assertEqual(
+            response_data["billing"],
+            {"plan": None, "current_usage": {"value": 3, "formatted": "3"}},
+        )
 
     @patch("multi_tenancy.stripe._get_customer_id")
     def test_team_that_should_set_up_billing_starts_a_checkout_session(
@@ -98,7 +112,9 @@ class TestOrganizationBilling(TransactionBaseTest):
     ):
         mock_customer_id.return_value = "cus_000111222"
         organization, team, user = self.create_org_team_user()
-        plan = self.create_plan(custom_setup_billing_message="Sign up now!")
+        plan = self.create_plan(
+            custom_setup_billing_message="Sign up now!", event_allowance=50000
+        )
         instance: OrganizationBilling = OrganizationBilling.objects.create(
             organization=organization, should_setup_billing=True, plan=plan,
         )
@@ -133,6 +149,9 @@ class TestOrganizationBilling(TransactionBaseTest):
                 "key": plan.key,
                 "name": plan.name,
                 "custom_setup_billing_message": "Sign up now!",
+                "allowance": {"value": 50000, "formatted": "50K"},
+                "image_url": "",
+                "self_serve": False,
             },
         )
 
@@ -202,7 +221,14 @@ class TestOrganizationBilling(TransactionBaseTest):
 
         self.assertEqual(
             response_data["billing"]["plan"],
-            {"key": "startup", "name": plan.name, "custom_setup_billing_message": "",},
+            {
+                "key": "startup",
+                "name": plan.name,
+                "custom_setup_billing_message": "",
+                "allowance": None,
+                "image_url": "",
+                "self_serve": False,
+            },
         )
 
         # Check that the checkout session was saved to the database
@@ -286,7 +312,11 @@ class TestOrganizationBilling(TransactionBaseTest):
 
     def test_cannot_start_double_billing_subscription(self):
         organization, team, user = self.create_org_team_user()
-        plan = self.create_plan()
+        plan = self.create_plan(
+            event_allowance=8_500_000,
+            image_url="http://test.posthog.com/image.png",
+            self_serve=True,
+        )
         instance: OrganizationBilling = OrganizationBilling.objects.create(
             organization=organization,
             should_setup_billing=True,
@@ -302,13 +332,14 @@ class TestOrganizationBilling(TransactionBaseTest):
         response_data = self.client.post("/api/user/").json()
 
         self.assertEqual(
-            response_data["billing"],
+            response_data["billing"]["plan"],
             {
-                "plan": {
-                    "key": plan.key,
-                    "name": plan.name,
-                    "custom_setup_billing_message": "",
-                },
+                "key": plan.key,
+                "name": plan.name,
+                "custom_setup_billing_message": "",
+                "allowance": {"value": 8500000, "formatted": "8.5M"},
+                "image_url": "http://test.posthog.com/image.png",
+                "self_serve": True,
             },
         )
 
@@ -334,6 +365,47 @@ class TestOrganizationBilling(TransactionBaseTest):
 
         instance.refresh_from_db()
         self.assertEqual(instance.stripe_checkout_session, "")
+
+    @patch("multi_tenancy.utils.get_cached_monthly_event_usage")
+    def test_event_usage_is_cached(self, mock_method):
+        organization, team, user = self.create_org_team_user()
+        self.client.force_login(user)
+
+        # Org has no events, but cached result is used
+        cache.set(f"monthly_usage_{organization.id}", 4831, 10)
+
+        response = self.client.post("/api/user/")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+        # Assert that the uncached method was not called
+        mock_method.assert_not_called()
+
+        response_data: Dict = response.json()
+        self.assertEqual(
+            response_data["billing"],
+            {"plan": None, "current_usage": {"value": 4831, "formatted": "4.8K"}},
+        )
+
+    @freeze_time("2018-12-31T22:59:59.000000Z")
+    def test_event_usage_cache_is_reset_at_beginning_of_month(self):
+        organization, team, user = self.create_org_team_user()
+        self.client.force_login(user)
+
+        for _ in range(0, 3):
+            Event.objects.create(team=team)
+
+        response = self.client.post("/api/user/")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.json()["billing"]["current_usage"]["value"], 3)
+
+        # Check that result was cached
+        cache_key = f"monthly_usage_{organization.id}"
+        self.assertEqual(cache.get(cache_key), 3)
+
+        # Even though default caching time is 12 hours, the result is only cached until beginning of next month
+        self.assertEqual(
+            cache._expire_info.get(cache.make_key(cache_key)), 1546300800.0,
+        )  # 1546300800 = Jan 1, 2019 00:00 UTC
 
     # Manage billing
 
@@ -369,8 +441,88 @@ class TestOrganizationBilling(TransactionBaseTest):
         self.assertEqual(response.status_code, status.HTTP_302_FOUND)
         self.assertEqual(response.url, "/")
 
-    # Stripe webhooks
+    @patch("multi_tenancy.stripe._get_customer_id")
+    def test_organization_can_enroll_in_self_serve_plan(self, mock_customer_id):
+        mock_customer_id.return_value = "cus_000111222"
+        organization, team, user = self.create_org_team_user()
+        plan = self.create_plan(self_serve=True)
 
+        org_billing = OrganizationBilling.objects.create(
+            organization=organization,
+            should_setup_billing=True,
+            plan=self.create_plan(),
+        )  # note the org has another plan configured but no active billing subscription
+
+        self.client.force_login(user)
+
+        response = self.client.post("/billing/subscribe", {"plan": plan.key})
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(
+            response.data,
+            {
+                "stripe_checkout_session": "cs_1234567890",
+                "subscription_url": "/billing/setup?session_id=cs_1234567890",
+            },
+        )
+
+        org_billing.refresh_from_db()
+        self.assertEqual(org_billing.stripe_checkout_session, "cs_1234567890")
+        self.assertEqual(org_billing.stripe_customer_id, "cus_000111222")
+        self.assertEqual(org_billing.plan, plan)
+        self.assertTrue(
+            (timezone.now() - org_billing.checkout_session_created_at).total_seconds()
+            <= 2,
+        )
+
+    @patch("multi_tenancy.stripe._get_customer_id")
+    def test_organization_can_enroll_in_self_serve_plan_without_having_an_organization_billing_yet(
+        self, mock_customer_id,
+    ):
+        mock_customer_id.return_value = "cus_000111222"
+        organization, team, user = self.create_org_team_user()
+        plan = self.create_plan(self_serve=True)
+
+        self.client.force_login(user)
+
+        response = self.client.post("/billing/subscribe", {"plan": plan.key})
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(
+            response.data,
+            {
+                "stripe_checkout_session": "cs_1234567890",
+                "subscription_url": "/billing/setup?session_id=cs_1234567890",
+            },
+        )
+
+        org_billing = organization.billing
+        self.assertEqual(org_billing.stripe_checkout_session, "cs_1234567890")
+        self.assertEqual(org_billing.stripe_customer_id, "cus_000111222")
+        self.assertEqual(org_billing.plan, plan)
+        self.assertEqual(org_billing.should_setup_billing, True)
+        self.assertTrue(
+            (timezone.now() - org_billing.checkout_session_created_at).total_seconds()
+            <= 2,
+        )
+
+    def test_cannot_enroll_in_non_self_serve_plan(self):
+        organization, team, user = self.create_org_team_user()
+        plan = self.create_plan(self_serve=False)
+
+        org_billing = OrganizationBilling.objects.create(organization=organization)
+
+        self.client.force_login(user)
+
+        response = self.client.post("/billing/subscribe", {"plan": plan.key})
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+        org_billing.refresh_from_db()
+        self.assertEqual(org_billing.plan, None)
+        self.assertEqual(org_billing.stripe_checkout_session, "")
+        self.assertEqual(org_billing.stripe_customer_id, "")
+        self.assertEqual(org_billing.checkout_session_created_at, None)
+
+
+class TestStripeWebhooks(TransactionBaseTest, PlanTestMixin):
     def generate_webhook_signature(
         self, payload: str, secret: str, timestamp: timezone.datetime = None,
     ) -> str:
@@ -730,3 +882,99 @@ class TestOrganizationBilling(TransactionBaseTest):
     #         "price_test_1"  # price_test_1 is not on posthog.models.user.License.PLANS
     #     )
     #     self.assertFalse(self.user.is_feature_available("whatever"))
+
+
+class PlanTestCase(APIBaseTest, PlanTestMixin):
+    def setUp(self):
+        super().setUp()
+
+        for _ in range(0, 3):
+            self.create_plan()
+
+        self.create_plan(is_active=False)
+        self.create_plan(event_allowance=49334, self_serve=True)
+
+    def test_listing_and_retrieving_plans(self):
+        response = self.client.get("/plans")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(
+            response.data["count"], Plan.objects.exclude(is_active=False).count(),
+        )
+
+        for item in response.data["results"]:
+            obj = Plan.objects.get(key=item["key"])
+
+            self.assertEqual(
+                list(item.keys()),
+                [
+                    "key",
+                    "name",
+                    "custom_setup_billing_message",
+                    "allowance",
+                    "image_url",
+                    "self_serve",
+                ],
+            )
+
+            if obj.event_allowance:
+                self.assertEqual(
+                    item["allowance"], {"value": 49334, "formatted": "49.3K"},
+                )
+
+            retrieve_response = self.client.get(f"/plans/{obj.key}")
+            self.assertEqual(retrieve_response.status_code, status.HTTP_200_OK)
+            self.assertEqual(
+                retrieve_response.data, item,
+            )  # Retrieve response is equal to list response
+
+    def test_list_self_serve_plans(self):
+        response = self.client.get("/plans?self_serve=1")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(
+            response.data["count"],
+            Plan.objects.exclude(is_active=False).exclude(self_serve=False).count(),
+        )
+
+        for item in response.data["results"]:
+            obj = Plan.objects.get(key=item["key"])
+
+            self.assertEqual(
+                list(item.keys()),
+                [
+                    "key",
+                    "name",
+                    "custom_setup_billing_message",
+                    "allowance",
+                    "image_url",
+                    "self_serve",
+                ],
+            )
+            self.assertEqual(obj.self_serve, True)
+
+    def test_inactive_plans_cannot_be_retrieved(self):
+        plan = self.create_plan(is_active=False)
+        response = self.client.get(f"/plans/{plan.key}")
+        self.assertEqual(
+            response.json(),
+            {
+                "attr": None,
+                "code": "not_found",
+                "detail": "Not found.",
+                "type": "invalid_request",
+            },
+        )
+
+    def test_cannot_update_plans(self):
+        plan = self.create_plan()
+
+        # PUT UPDATE
+        response = self.client.put(f"/plans/{plan.key}", {"price_id": "new_pricing"})
+        self.assertEqual(response.status_code, status.HTTP_405_METHOD_NOT_ALLOWED)
+        plan.refresh_from_db()
+        self.assertNotEqual(plan.price_id, "new_pricing")
+
+        # PATCH UPDATE
+        response = self.client.patch(f"/plans/{plan.key}", {"price_id": "new_pricing"})
+        self.assertEqual(response.status_code, status.HTTP_405_METHOD_NOT_ALLOWED)
+        plan.refresh_from_db()
+        self.assertNotEqual(plan.price_id, "new_pricing")

@@ -1,20 +1,35 @@
+from typing import Dict, Optional
+
+from django.core.exceptions import ImproperlyConfigured
+from django.utils import timezone
 from messaging.tasks import process_organization_signup_messaging
 from posthog.api.team import TeamSignupSerializer
+from posthog.models import User
+from posthog.templatetags.posthog_filters import compact_number
 from rest_framework import serializers
+from sentry_sdk import capture_exception
 
 from .models import OrganizationBilling, Plan
+
+
+class ReadOnlySerializer(serializers.ModelSerializer):
+    def create(self, validated_data: Dict):
+        raise NotImplementedError()
+
+    def update(self, validated_data: Dict):
+        raise NotImplementedError()
 
 
 class MultiTenancyOrgSignupSerializer(TeamSignupSerializer):
     plan = serializers.CharField(max_length=32, required=False)
 
-    def validate_plan(self, data):
+    def validate_plan(self, data: Dict) -> Optional[Plan]:
         try:
             return Plan.objects.get(key=data)
         except Plan.DoesNotExist:
             return None
 
-    def create(self, validated_data):
+    def create(self, validated_data: Dict) -> User:
         plan = validated_data.pop("plan", None)
         user = super().create(validated_data)
 
@@ -32,8 +47,82 @@ class MultiTenancyOrgSignupSerializer(TeamSignupSerializer):
         return user
 
 
-class PlanSerializer(serializers.ModelSerializer):
+class PlanSerializer(ReadOnlySerializer):
+    allowance = serializers.SerializerMethodField()
+
     class Meta:
         model = Plan
-        fields = ["key", "name", "custom_setup_billing_message"]
-        read_only_fields = ["key", "name", "custom_setup_billing_message"]
+        fields = [
+            "key",
+            "name",
+            "custom_setup_billing_message",
+            "allowance",
+            "image_url",
+            "self_serve",
+        ]
+
+    def get_allowance(self, obj: Plan) -> Optional[Dict]:
+        if not obj.event_allowance:
+            return None
+        return {
+            "value": obj.event_allowance,
+            "formatted": compact_number(obj.event_allowance),
+        }
+
+
+class BillingSubscribeSerializer(serializers.Serializer):
+    """
+    Serializer allowing a user to set up billing information.
+    """
+
+    plan = serializers.SlugRelatedField(
+        slug_field="key", queryset=Plan.objects.filter(is_active=True, self_serve=True),
+    )
+
+    def create(self, validated_data: Dict) -> Dict:
+
+        assert self.context, "context is required"
+
+        user: User = self.context["request"].user
+
+        instance, _created = OrganizationBilling.objects.get_or_create(
+            organization=user.organization,
+        )
+
+        if instance.is_billing_active:
+            raise serializers.ValidationError(
+                "Your organization already has billing set up, please contact us to change.",
+            )
+
+        try:
+            (checkout_session, customer_id) = validated_data[
+                "plan"
+            ].create_checkout_session(
+                user=user,
+                team_billing=instance,
+                base_url=self.context["request"].build_absolute_uri("/"),
+            )
+        except ImproperlyConfigured as e:
+            capture_exception(e)
+            checkout_session = None
+
+        if not checkout_session:
+            raise serializers.ValidationError(
+                "Error starting your billing subscription. Please try again.",
+            )
+
+        instance.plan = validated_data["plan"]
+        instance.stripe_customer_id = customer_id
+        instance.stripe_checkout_session = checkout_session
+        instance.checkout_session_created_at = timezone.now()
+        instance.should_setup_billing = True
+        instance.save()
+
+        return {
+            "stripe_checkout_session": checkout_session,
+            "subscription_url": f"/billing/setup?session_id={checkout_session}",
+        }
+
+    def to_representation(self, instance):
+        return instance
+

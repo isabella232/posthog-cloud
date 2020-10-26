@@ -1,12 +1,14 @@
 from typing import List
 
 from django.contrib.auth import decorators
-from django.urls import re_path
+from django.urls import path, re_path
 from posthog.urls import home, opt_slash_path
 from posthog.urls import urlpatterns as posthog_urls
 
 from .views import (
+    BillingSubscribeViewset,
     MultiTenancyOrgSignupViewset,
+    PlanViewset,
     billing_failed_view,
     billing_hosted_view,
     billing_welcome_view,
@@ -22,7 +24,7 @@ urlpatterns: List = [
         "api/user", user_with_billing,
     ),  # Override to include billing information (included at the top to overwrite main repo `posthog` route)
     opt_slash_path(
-        "api/team/signup", MultiTenancyOrgSignupViewset.as_view()
+        "api/team/signup", MultiTenancyOrgSignupViewset.as_view(),
     ),  # Override to support setting a billing plan on signup
 ]
 
@@ -50,6 +52,19 @@ urlpatterns += [
     opt_slash_path(
         "billing/stripe_webhook", stripe_webhook, name="billing_stripe_webhook",
     ),  # Stripe Webhook
+    opt_slash_path(
+        "billing/subscribe",
+        BillingSubscribeViewset.as_view({"post": "create"}),
+        name="billing_subscribe",
+    ),
+    opt_slash_path(
+        "plans", PlanViewset.as_view({"get": "list"}), name="billing_plans",
+    ),
+    path(
+        "plans/<str:key>",
+        PlanViewset.as_view({"get": "retrieve"}),
+        name="billing_plan",
+    ),
     re_path(
         r"^.*", decorators.login_required(home),
     ),  # Should always be at the very last position
