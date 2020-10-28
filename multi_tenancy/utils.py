@@ -4,11 +4,13 @@ from typing import Tuple
 
 import pytz
 from dateutil.relativedelta import relativedelta
+from django.conf import settings
 from django.core.cache import cache
 from django.utils import timezone
-from posthog.models import Event, Organization
+from ee.clickhouse.client import sync_execute
+from posthog.models import Organization, Team
 
-EVENT_CACHING_EXPIRY: int = 12 * 60 * 60  # 12 hours
+EVENT_USAGE_CACHING_TTL: int = settings.EVENT_USAGE_CACHING_TTL
 
 
 def get_monthly_event_usage(
@@ -30,11 +32,26 @@ def get_monthly_event_usage(
         datetime.time.max,
     ).replace(tzinfo=pytz.UTC)
 
-    return Event.objects.filter(
-        team__in=organization.teams.all(),
-        timestamp__gte=start_date,
-        timestamp__lte=end_date,
-    ).count()
+    result = sync_execute(
+        "SELECT count(1) FROM events where team_id IN %(team_ids)s AND timestamp"
+        " >= %(date_from)s AND timestamp <= %(date_to)s",
+        {
+            "date_from": start_date.strftime("%Y-%m-%d %H:%M:%S"),
+            "date_to": end_date.strftime("%Y-%m-%d %H:%M:%S"),
+            "team_ids": list(
+                Team.objects.filter(organization=organization).values_list(
+                    "id", flat=True,
+                ),
+            ),
+        },
+    )
+
+    if result:
+        return result[0][0]
+
+    return (
+        -1
+    )  # use -1 to distinguish from an actual 0 in case CH is not available (mainly to run posthog tests)
 
 
 def get_cached_monthly_event_usage(organization: Organization) -> int:
@@ -60,7 +77,7 @@ def get_cached_monthly_event_usage(organization: Organization) -> int:
         cache_key,
         result,
         min(
-            EVENT_CACHING_EXPIRY,
+            EVENT_USAGE_CACHING_TTL,
             (start_of_next_month - timezone.now()).total_seconds(),
         ),
     )  # cache result for default time or until next month
