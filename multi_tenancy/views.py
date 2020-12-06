@@ -218,6 +218,7 @@ def stripe_webhook(request: HttpRequest) -> JsonResponse:
                     "using the first one.",
                 )
 
+            # TODO: Validate plan in case it has changed outside the scope of posthog-production
             instance.billing_period_ends = datetime.datetime.utcfromtimestamp(
                 line_items[0]["period"]["end"],
             ).replace(tzinfo=pytz.utc)
