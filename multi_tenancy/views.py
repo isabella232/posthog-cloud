@@ -22,11 +22,8 @@ from sentry_sdk import capture_exception, capture_message
 import stripe
 
 from .models import OrganizationBilling, Plan
-from .serializers import (
-    BillingSubscribeSerializer,
-    MultiTenancyOrgSignupSerializer,
-    PlanSerializer,
-)
+from .serializers import (BillingSubscribeSerializer,
+                          MultiTenancyOrgSignupSerializer, PlanSerializer)
 from .stripe import cancel_payment_intent, customer_portal_url, parse_webhook
 from .utils import get_cached_monthly_event_usage
 
@@ -64,20 +61,28 @@ def user_with_billing(request: HttpRequest):
     response = user(request)
 
     if response.status_code == 200:
-        # TODO: Handle multiple organizations
         instance, _created = OrganizationBilling.objects.get_or_create(
             organization=request.user.organization,
         )
 
         output = json.loads(response.content)
-        event_usage: int = get_cached_monthly_event_usage(request.user.organization)
         output["billing"] = {
             "plan": None,
-            "current_usage": {
+        }
+
+        # Obtain event usage of current organization
+        event_usage: Optional[int] = None
+        try:
+            # Function calls clickhouse so make sure Clickhouse failure doesn't block api/user from loading
+            event_usage = get_cached_monthly_event_usage(request.user.organization)
+        except Exception as e:
+            capture_exception(e)
+
+        if event_usage is not None:
+            output["billing"]["current_usage"] = {
                 "value": event_usage,
                 "formatted": compact_number(event_usage),
-            },
-        }
+            }
 
         if instance.plan:
             plan_serializer = PlanSerializer()
