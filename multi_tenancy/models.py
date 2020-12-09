@@ -1,10 +1,15 @@
+import datetime
 from typing import List, Optional, Tuple
 
 from django.db import models
 from django.utils import timezone
-from posthog.models import Organization, Team
+from posthog.models import Organization, User
 
-from .stripe import create_subscription, create_zero_auth
+from .stripe import (
+    create_subscription,
+    create_subscription_checkout_session,
+    create_zero_auth,
+)
 
 PLANS = {
     "starter": ["organizations_projects"],
@@ -14,6 +19,11 @@ PLANS = {
 
 
 class Plan(models.Model):
+    """
+    Base model for different plans. Note that custom logic (e.g. doing card validation
+    instead of starting a subscription) is registered in the OrganizationBilling object.
+    """
+
     key: models.CharField = models.CharField(
         max_length=32, unique=True, db_index=True,
     )
@@ -27,6 +37,10 @@ class Plan(models.Model):
         default=None, null=True, blank=True,
     )  # number of monthly events that this plan allows; use null for unlimited events
     is_active: models.BooleanField = models.BooleanField(default=True)
+    is_metered_billing: models.BooleanField = models.BooleanField(
+        default=False
+    )  # whether the plan is usaged-based (metered event-based billing) instead of flat-fee recurring billing;
+    # https://stripe.com/docs/billing/subscriptions/metered-billing
     self_serve: models.BooleanField = models.BooleanField(
         default=False,
     )  # Whether users can subscribe to this plan by themselves **after sign up**
@@ -35,29 +49,6 @@ class Plan(models.Model):
     def save(self, *args, **kwargs):
         self.full_clean()
         return super().save(*args, **kwargs)
-
-    def create_checkout_session(
-        self, user, team_billing, base_url: str,
-    ) -> Tuple[Optional[str], Optional[str]]:
-        """
-        Creates a checkout session for the specified plan.
-        Uses any custom logic specific to the plan if configured.
-        """
-
-        if self.key == "startup":
-            # For the startup plan we only do a card validation (no subscription)
-            return create_zero_auth(
-                email=user.email,
-                base_url=base_url,
-                customer_id=team_billing.stripe_customer_id,
-            )
-
-        return create_subscription(
-            email=user.email,
-            base_url=base_url,
-            price_id=self.price_id,
-            customer_id=team_billing.stripe_customer_id,
-        )
 
     def __str__(self) -> str:
         return self.name
@@ -74,6 +65,9 @@ class OrganizationBilling(models.Model):
     )
     stripe_customer_id: models.CharField = models.CharField(max_length=128, blank=True)
     stripe_checkout_session: models.CharField = models.CharField(
+        max_length=128, blank=True,
+    )
+    stripe_subscription_item_id: models.CharField = models.CharField(
         max_length=128, blank=True,
     )
     checkout_session_created_at: models.DateTimeField = models.DateTimeField(
@@ -112,3 +106,42 @@ class OrganizationBilling(models.Model):
 
         return []
 
+    def create_checkout_session(
+        self, user: User, base_url: str,
+    ) -> Tuple[Optional[str], Optional[str]]:
+        """
+        Creates a checkout session for the specified plan.
+        Uses any custom logic specific to the plan if configured.
+        """
+
+        # For metered-billing, we do a card setup for future billing, this specifically means that a subscription
+        # agreement is not yet created. This is coincidentally the same behavior for the startup plan.
+        if self.plan.is_metered_billing or self.plan.key == "startup":
+            # For the startup plan we only do a card validation (no subscription)
+            return create_zero_auth(
+                email=user.email,
+                base_url=base_url,
+                customer_id=self.stripe_customer_id,
+            )
+
+        return create_subscription_checkout_session(
+            email=user.email,
+            base_url=base_url,
+            price_id=self.plan.price_id,
+            customer_id=self.stripe_customer_id,
+        )
+
+    def handle_post_card_validation(self) -> None:
+        """
+        Handles logic after a card has been validated.
+        """
+        if self.plan.key == "startup":
+            self.billing_period_ends = timezone.now() + datetime.timedelta(days=365)
+            self.should_setup_billing = False
+        elif self.plan.is_metered_billing:
+            subscription_id, _ = create_subscription(
+                price_id=self.plan.price_id, customer_id=self.stripe_customer_id,
+            )
+            self.stripe_subscription_item_id = subscription_id
+            self.should_setup_billing = False
+        self.save()
