@@ -1,3 +1,4 @@
+import datetime
 import logging
 from typing import Dict, Optional, Tuple, Union
 
@@ -135,3 +136,19 @@ def parse_webhook(payload: Union[bytes, str], signature: str) -> Dict:
 
 def compute_webhook_signature(payload: str, secret: str) -> str:
     return stripe.webhook.WebhookSignature._compute_signature(payload, secret)
+
+
+def report_subscription_item_usage(
+    subscription_item_id: str, billed_usage: int, timestamp: datetime.datetime,
+) -> bool:
+    _init_stripe()
+
+    # The idempotency_key is the combination of the subscription ID and current timestamp, as we should only report
+    # usage once per day, this should ensure no events are doubled counted
+    usage_record = stripe.SubscriptionItem.create_usage_record(
+        subscription_item_id,
+        quantity=billed_usage,
+        timestamp=timezone.now(),
+        idempotency_key=f"{subscription_item_id}-{timestamp.strftime('%Y-%m-%d')}",
+    )
+    return bool(usage_record.id)
