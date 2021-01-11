@@ -55,3 +55,7 @@ Below is the documentation for the environment variables specifically scoped to 
 - `STRIPE_PUBLISHABLE_KEY`. Publishable API key for Stripe to generate checkout sessions.
 - `STRIPE_WEBHOOK_SECRET`. Secret to verify webhooks indeed come from Stripe.
 - `BILLING_TRIAL_DAYS`. Number of days (integer) to set up a trial for on each new metered or tiered-based subscription. Can be set to `0` for no trial.
+
+## Questions?
+
+### [Join our Slack community.](https://join.slack.com/t/posthogusers/shared_invite/enQtOTY0MzU5NjAwMDY3LTc2MWQ0OTZlNjhkODk3ZDI3NDVjMDE1YjgxY2I4ZjI4MzJhZmVmNjJkN2NmMGJmMzc2N2U3Yjc3ZjI5NGFlZDQ)
