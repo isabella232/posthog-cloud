@@ -5,7 +5,7 @@ This repository is used to run PostHog Cloud (app.posthog.com). It enables anyon
 NOTE: This repository **is copyrighted** (unlike our [main repo](https://github.com/posthog/posthog)). You are not allowed to use this code to host your own version of app.posthog.com
 
 ## Current Infrastructure
-![Infra Diagram](https://uc1bb21bf621abf8f7adafced790.previews.dropboxusercontent.com/p/thumb/ABEhGjy-h7xVH8ciFB_5alLkQMYP0iFfrcvjv5T7ESkuL4_J5elgKPVa0L2bnpG1VFLfDYoT0LE1qy-opLHLAnnTZyzemmZ_1HbghXcD32clAZi-ySOtTb2qtuctlo3MXQ-sU4wDI5kQqEUeo_fgI6avg-YUevkwR9l4AVPImIU0TVC9UcaYKsUaDjVG63p7396uIawIrePX3PpZdqYYKNxuhzJ7Q6KtVsUWC4XlhzdMWHCQHZCcZjV8-MYk6CwlcDYasU3H2jsIjHnetMBVZCVDOpr5taPEtQSKJNTRUDRJBcpuHFUdqf9nQjC_UKhR3P1Wwq1AAH-2GZB6qn841NhaWK77dis0UVhYkuNMZztaAOK6XvcVMWBcEQyRCMQITlrqfq5VNZUAHUWzN3H4OrkK/p.png?size=2048x1536&size_mode=3)
+![Infra Diagram](https://uc55948ea5392ebc818c6ebb06f8.previews.dropboxusercontent.com/p/thumb/ABHcAXY_qRogLvM8XxVwX0I0PFgaNu3mGhGycB9Qib1ij_FLPNsdx18IZpK0XQNGP-Nuk60ngAF-HKVUk8VFhALM-6dEWfR7fjEWv8EsdGPePWYQkvzfrht7gp9wsrmF_2VCzzDptLr9jWDs1uI6DKo7z4jLLjlGBmyBG5SCqOajk335KRWNJ8eSUeeNmbO2565zm5ndpA9HO7smsyBnkngqWyoCyptki_4SVKiHvl-uAg89xNK7gF4crPuqjQLN-s_OedRdpP5vn9gNTmCIcR_QJJ4x9naeHyQ66oBMSyNCS9m7P3RAjc6iZxt4LuQ791D1o1HwT2yGPmvmk7dNCi9u2zqTjd1wJGaxEj1zXqatjms6s0HHrywy6Y30rsdzjg5-6X8pKvn2F0489ZlW4UGf/p.png?size=2048x1536&size_mode=3)
 
 ## Structure
 
