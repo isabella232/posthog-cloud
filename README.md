@@ -4,6 +4,9 @@ This repository is used to run PostHog Cloud (app.posthog.com). It enables anyon
 
 NOTE: This repository **is copyrighted** (unlike our [main repo](https://github.com/posthog/posthog)). You are not allowed to use this code to host your own version of app.posthog.com
 
+## Current Infrastructure
+![Infra Diagram](https://uc1bb21bf621abf8f7adafced790.previews.dropboxusercontent.com/p/thumb/ABEhGjy-h7xVH8ciFB_5alLkQMYP0iFfrcvjv5T7ESkuL4_J5elgKPVa0L2bnpG1VFLfDYoT0LE1qy-opLHLAnnTZyzemmZ_1HbghXcD32clAZi-ySOtTb2qtuctlo3MXQ-sU4wDI5kQqEUeo_fgI6avg-YUevkwR9l4AVPImIU0TVC9UcaYKsUaDjVG63p7396uIawIrePX3PpZdqYYKNxuhzJ7Q6KtVsUWC4XlhzdMWHCQHZCcZjV8-MYk6CwlcDYasU3H2jsIjHnetMBVZCVDOpr5taPEtQSKJNTRUDRJBcpuHFUdqf9nQjC_UKhR3P1Wwq1AAH-2GZB6qn841NhaWK77dis0UVhYkuNMZztaAOK6XvcVMWBcEQyRCMQITlrqfq5VNZUAHUWzN3H4OrkK/p.png?size=2048x1536&size_mode=3)
+
 ## Structure
 
 The main repo is pulled using the script into the `/deploy` folder. The contents of `multi_tenancy` & `messaging` are then added into `/deploy` (if on development, folders are symlinked instead of copied so changes are updated automatically in both locations). We also use `multi_tenancy_settings.py` & `requirements.txt` to introduce a few changes to the base code.
