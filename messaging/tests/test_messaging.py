@@ -65,16 +65,12 @@ class TestMessaging(BaseTest):
 
     def test_does_not_send_event_ingestion_email_on_invalid_address(self):
         user: User = User.objects.create(email="a2a8191d-5af9-4473-a44c-4608285a9b7c")
-        self.team.users.add(user)
-        self.team.save()
 
         check_and_send_no_event_ingestion_follow_up(user.pk)
         self.assertEqual(len(mail.outbox), 0)
 
     def test_does_not_send_event_ingestion_email_if_user_is_anonymized(self):
         user: User = User.objects.create(email="valid@posthog.com", anonymize_data=True)
-        self.team.users.add(user)
-        self.team.save()
 
         check_and_send_no_event_ingestion_follow_up(user.pk)
         self.assertEqual(len(mail.outbox), 0)
@@ -83,8 +79,6 @@ class TestMessaging(BaseTest):
         self,
     ):
         user: User = User.objects.create(email="valid@posthog.com")
-        self.team.users.add(user)
-        self.team.save()
 
         for i in range(0, 3):
             check_and_send_no_event_ingestion_follow_up(user.pk)
@@ -92,8 +86,6 @@ class TestMessaging(BaseTest):
 
     def test_event_ingestion_email_is_sent_again_if_previous_attempt_failed(self,):
         user: User = User.objects.create(email="valid@posthog.com")
-        self.team.users.add(user)
-        self.team.save()
         UserMessagingRecord.objects.create(
             user=user,
             campaign=UserMessagingRecord.NO_EVENT_INGESTION_FOLLOW_UP,  # sent_at = None (i.e. has not been sent)
