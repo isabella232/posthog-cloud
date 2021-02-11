@@ -19,7 +19,7 @@ if (
     TEMPLATES[0]["DIRS"].insert(0, "multi_tenancy/templates")
 
 
-EVENT_USAGE_CACHING_TTL = get_from_env("EVENT_USAGE_CACHING_TTL", 12 * 60 * 60, type_cast: int)
+EVENT_USAGE_CACHING_TTL = get_from_env("EVENT_USAGE_CACHING_TTL", 12 * 60 * 60, type_cast=int)
 
 
 # Stripe settings
