@@ -34,4 +34,4 @@ STRIPE_WEBHOOK_SECRET = os.environ.get("STRIPE_WEBHOOK_SECRET", "")
 # https://github.com/posthog/posthog-production
 
 BILLING_TRIAL_DAYS = get_from_env("BILLING_TRIAL_DAYS", 0, type_cast=int)
-BILLING_NO_PLAN_EVENT_ALLOCATION = get_from_env("BILLING_NO_PLAN_EVENT_ALLOCATION", optional=True)
+BILLING_NO_PLAN_EVENT_ALLOCATION = get_from_env("BILLING_NO_PLAN_EVENT_ALLOCATION", optional=True, type_cast=int)
