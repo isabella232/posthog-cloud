@@ -55,19 +55,6 @@ class Plan(models.Model):
     def __str__(self) -> str:
         return self.name
 
-    @property
-    def allowance(self) -> Optional[Dict[str, Union[str, int]]]:
-        """
-        Formatted event allowance.
-        """
-        if not self.event_allowance:
-            return None
-
-        return {
-            "value": self.event_allowance,
-            "formatted": compact_number(self.event_allowance),
-        }
-
 
 class OrganizationBilling(models.Model):
     """An extension to Organization for handling PostHog Cloud billing."""
@@ -115,23 +102,14 @@ class OrganizationBilling(models.Model):
         return self.plan.price_id if self.plan else ""
 
     @property
-    def event_allocation(self) -> Optional[Dict[str, Union[str, int]]]:
+    def event_allocation(self) -> Optional[int]:
         """
         Returns the event allocation applicable to the organization.
         """
-        if not self.plan or not self.is_billing_active:
+        if not self.is_billing_active:
             # No active billing plan, default to event allocation for when no billing plan is active
-            no_plan_event_allocation = settings.BILLING_NO_PLAN_EVENT_ALLOCATION
-
-            if no_plan_event_allocation is None:
-                return None
-
-            return {
-                "value": no_plan_event_allocation,
-                "formatted": compact_number(no_plan_event_allocation),
-            }
-
-        return self.plan.allowance
+            return settings.BILLING_NO_PLAN_EVENT_ALLOCATION
+        return self.plan.event_allowance
 
     @property
     def available_features(self) -> List[str]:
