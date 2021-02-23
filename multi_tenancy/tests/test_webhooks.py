@@ -8,15 +8,14 @@ from freezegun.api import freeze_time
 from multi_tenancy.models import OrganizationBilling, Plan
 from multi_tenancy.stripe import compute_webhook_signature
 from posthog.api.test.base import TransactionBaseTest
+from posthog.models import User
 from rest_framework import status
 
 from .base import PlanTestMixin
 
 
 class TestStripeWebhooks(TransactionBaseTest, PlanTestMixin):
-    def generate_webhook_signature(
-        self, payload: str, secret: str, timestamp: timezone.datetime = None,
-    ) -> str:
+    def generate_webhook_signature(self, payload: str, secret: str, timestamp: timezone.datetime = None,) -> str:
         timestamp = timezone.now() if not timestamp else timestamp
         computed_timestamp: int = int(timestamp.timestamp())
         signature: str = compute_webhook_signature(
@@ -24,15 +23,15 @@ class TestStripeWebhooks(TransactionBaseTest, PlanTestMixin):
         )
         return f"t={computed_timestamp},v1={signature}"
 
-    def test_billing_period_is_updated_when_webhook_is_received(self):
+    @patch("posthoganalytics.capture")
+    def test_billing_period_is_updated_when_webhook_is_received(self, mock_capture):
 
         sample_webhook_secret: str = "wh_sec_test_abcdefghijklmnopqrstuvwxyz"
+        plan = Plan.objects.create(key="test_plan", name="Test Plan", price_id="price_test")
 
-        organization, team, user = self.create_org_team_user()
+        organization, _, user = self.create_org_team_user()
         instance: OrganizationBilling = OrganizationBilling.objects.create(
-            organization=organization,
-            should_setup_billing=True,
-            stripe_customer_id="cus_aEDNOHbSpxHcmq",
+            organization=organization, should_setup_billing=True, stripe_customer_id="cus_aEDNOHbSpxHcmq", plan=plan,
         )
 
         # Note that the sample request here does not contain the entire body
@@ -102,39 +101,128 @@ class TestStripeWebhooks(TransactionBaseTest, PlanTestMixin):
         """
 
         signature: str = self.generate_webhook_signature(body, sample_webhook_secret)
-        csrf_client = Client(
-            enforce_csrf_checks=True,
-        )  # Custom client to ensure CSRF checks pass
+        csrf_client = Client(enforce_csrf_checks=True)  # Custom client to ensure CSRF checks pass
 
         with self.settings(STRIPE_WEBHOOK_SECRET=sample_webhook_secret):
-
             response = csrf_client.post(
-                "/billing/stripe_webhook",
-                body,
-                content_type="text/plain",
-                HTTP_STRIPE_SIGNATURE=signature,
+                "/billing/stripe_webhook", body, content_type="text/plain", HTTP_STRIPE_SIGNATURE=signature,
             )
         self.assertEqual(response.status_code, status.HTTP_200_OK)
 
         # Check that the period end was updated and subscription ID saved
+        billing_period_ends = timezone.datetime(2020, 8, 7, 12, 28, 15, tzinfo=pytz.UTC)
         instance.refresh_from_db()
-        self.assertEqual(
-            instance.billing_period_ends,
-            timezone.datetime(2020, 8, 7, 12, 28, 15, tzinfo=pytz.UTC),
-        )
+        self.assertEqual(instance.billing_period_ends, billing_period_ends)
         self.assertEqual(instance.stripe_subscription_item_id, "si_HbSpBTL6hI03Lp")
 
+        # Assert that analytics event is fired
+        mock_capture.assert_called_once_with(
+            user.distinct_id,
+            "billing subscription activated",
+            {
+                "plan_key": "test_plan",
+                "billing_period_ends": billing_period_ends,
+                "organization_id": str(organization.id),
+            },
+        )
+
+    @patch("posthoganalytics.capture")
+    def test_update_billing_period_for_existing_subscription(self, mock_capture):
+
+        sample_webhook_secret: str = "wh_sec_test_abcdefghijklmnopqrstuvwxyz"
+        plan = Plan.objects.create(key="existing_plan", name="Test Plan", price_id="price_test")
+
+        organization, _, user = self.create_org_team_user()
+        instance: OrganizationBilling = OrganizationBilling.objects.create(
+            organization=organization,
+            should_setup_billing=False,
+            stripe_customer_id="cus_xHcDNOEHbSpmq",
+            plan=plan,
+            billing_period_ends=timezone.now(),
+            stripe_subscription_item_id="si_HbSpBTL6hI03Lp",
+        )
+
+        # Note that the sample request here does not contain the entire body
+        body = """
+        {
+            "id": "evt_1H2FuICyh3ETxLbCJnSt7FQu",
+            "object": "event",
+            "data": {
+                "object": {
+                    "id": "in_1H2FuFCyh3ETxLbCNarFj00f",
+                    "customer": "cus_xHcDNOEHbSpmq",
+                    "customer_email": "user440@posthog.com",
+                    "lines": {
+                        "object": "list",
+                            "data": [
+                            {
+                                "id": "sli_a3c2f4407d4f2f",
+                                "object": "line_item",
+                                "amount": 2900,
+                                "currency": "usd",
+                                "description": "1 × PostHog Growth Plan (at $29.00 / month)",
+                                "period": {
+                                    "end": 1596803295,
+                                    "start": 1594124895
+                                },
+                                "subscription": "sub_HbSp2C2zNDnw1i",
+                                "subscription_item": "si_HbSpBTL6hI03Lp",
+                                "type": "subscription",
+                                "unique_id": "il_1H2FuFCyh3ETxLbCkOq5TZ5O"
+                            }
+                        ],
+                        "has_more": false,
+                        "total_count": 1
+                    },
+                    "paid": true,
+                    "period_end": 1594124895,
+                    "period_start": 1594124895,
+                    "status": "paid",
+                    "subscription": "sub_HbSp2C2zNDnw1i"
+                }
+            },
+            "livemode": false,
+            "type": "invoice.payment_succeeded"
+        }
+        """
+
+        signature: str = self.generate_webhook_signature(body, sample_webhook_secret)
+        csrf_client = Client(enforce_csrf_checks=True)  # Custom client to ensure CSRF checks pass
+
+        with self.settings(STRIPE_WEBHOOK_SECRET=sample_webhook_secret):
+            response = csrf_client.post(
+                "/billing/stripe_webhook", body, content_type="text/plain", HTTP_STRIPE_SIGNATURE=signature,
+            )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+        # Check that the period end was updated and subscription ID saved
+        billing_period_ends = timezone.datetime(2020, 8, 7, 12, 28, 15, tzinfo=pytz.UTC)
+        instance.refresh_from_db()
+        self.assertEqual(instance.billing_period_ends, billing_period_ends)
+
+        # Assert that analytics event is fired
+        mock_capture.assert_called_once_with(
+            user.distinct_id,
+            "billing subscription paid",
+            {
+                "plan_key": "existing_plan",
+                "billing_period_ends": billing_period_ends,
+                "organization_id": str(organization.id),
+            },
+        )
+
+    @patch("posthoganalytics.capture")
     @patch("multi_tenancy.views.cancel_payment_intent")
     def test_billing_period_special_handling_for_startup_plan(
-        self, cancel_payment_intent,
+        self, cancel_payment_intent, mock_capture,
     ):
 
         sample_webhook_secret: str = "wh_sec_test_abcdefghijklmnopqrstuvwxyz"
 
-        organization, team, user = self.create_org_team_user()
-        startup_plan = Plan.objects.create(
-            key="startup", name="Startup", price_id="not_set",
-        )
+        organization, _, user1 = self.create_org_team_user()
+        user2 = User.objects.create_user(email="test_user_2@posthog.com", first_name="Test 2", password="12345678")
+        user2.join(organization=organization)
+        startup_plan = Plan.objects.create(key="startup", name="Startup", price_id="not_set",)
         instance: OrganizationBilling = OrganizationBilling.objects.create(
             organization=organization,
             should_setup_billing=True,
@@ -183,29 +271,19 @@ class TestStripeWebhooks(TransactionBaseTest, PlanTestMixin):
         """
 
         signature: str = self.generate_webhook_signature(body, sample_webhook_secret)
-        csrf_client = Client(
-            enforce_csrf_checks=True,
-        )  # Custom client to ensure CSRF checks pass
+        csrf_client = Client(enforce_csrf_checks=True,)  # Custom client to ensure CSRF checks pass
 
         with self.settings(STRIPE_WEBHOOK_SECRET=sample_webhook_secret):
 
             response = csrf_client.post(
-                "/billing/stripe_webhook",
-                body,
-                content_type="text/plain",
-                HTTP_STRIPE_SIGNATURE=signature,
+                "/billing/stripe_webhook", body, content_type="text/plain", HTTP_STRIPE_SIGNATURE=signature,
             )
             self.assertEqual(response.status_code, status.HTTP_200_OK)
 
         # Check that the period end was updated (1 year from now)
         instance.refresh_from_db()
         self.assertTrue(
-            (
-                timezone.now()
-                + datetime.timedelta(days=365)
-                - instance.billing_period_ends
-            ).total_seconds(),
-            2,
+            (timezone.now() + datetime.timedelta(days=365) - instance.billing_period_ends).total_seconds(), 2,
         )
         self.assertEqual(
             instance.stripe_subscription_item_id, ""
@@ -214,35 +292,41 @@ class TestStripeWebhooks(TransactionBaseTest, PlanTestMixin):
         # Check that the payment is cancelled (i.e. not captured)
         cancel_payment_intent.assert_called_once_with("pi_TxLb1HS1CyhnDR")
 
+        # Assert that special analytics event is fired; test it's sent for every user in the org too
+        self.assertEqual(mock_capture.call_count, 2)
+        for _user in [user2, user1]:
+            mock_capture.assert_any_call(
+                _user.distinct_id,
+                "billing card validated",
+                {
+                    "plan_key": "startup",
+                    "billing_period_ends": instance.billing_period_ends,
+                    "organization_id": str(organization.id),
+                },
+            )
+
     @freeze_time("2020-11-09T14:59:30Z")
+    @patch("posthoganalytics.capture")
     @patch("multi_tenancy.stripe._get_customer_id")
     @patch("multi_tenancy.stripe.stripe.Subscription.create")
     @patch("multi_tenancy.views.cancel_payment_intent")
     def test_handle_webhook_for_metered_plans_after_card_registration(
-        self, cancel_payment_intent, mock_session_create, mock_customer_id
+        self, cancel_payment_intent, mock_session_create, mock_customer_id, mock_capture,
     ):
         sample_webhook_secret: str = "wh_sec_test_abcdefghijklmnopqrstuvwxyz"
         mock_customer_id.return_value = "cus_MeteredI2MVxJI"
         mock_session_data = MagicMock()
-        mock_session_data.to_dict.return_value = {
-            "items": {"data": [{"id": "si_1a2b3c4d", "metadata": {"a": "b"}}]}
-        }
+        mock_session_data.to_dict.return_value = {"items": {"data": [{"id": "si_1a2b3c4d", "metadata": {"a": "b"}}]}}
 
         mock_session_create.return_value = mock_session_data
 
-        organization, team, user = self.create_org_team_user()
+        organization, _, user = self.create_org_team_user()
         plan = Plan.objects.create(
-            key="metered",
-            name="Metered Plan",
-            price_id="price_zyxwvu",
-            is_metered_billing=True,
+            key="metered", name="Metered Plan", price_id="price_zyxwvu", is_metered_billing=True,
         )
 
         instance: OrganizationBilling = OrganizationBilling.objects.create(
-            organization=organization,
-            should_setup_billing=True,
-            stripe_customer_id="cus_MeteredI2MVxJI",
-            plan=plan,
+            organization=organization, should_setup_billing=True, stripe_customer_id="cus_MeteredI2MVxJI", plan=plan,
         )
 
         # Note that the sample request here does not contain the entire body
@@ -286,19 +370,12 @@ class TestStripeWebhooks(TransactionBaseTest, PlanTestMixin):
         """
 
         signature: str = self.generate_webhook_signature(body, sample_webhook_secret)
-        csrf_client = Client(
-            enforce_csrf_checks=True,
-        )  # Custom client to ensure CSRF checks pass
+        csrf_client = Client(enforce_csrf_checks=True,)  # Custom client to ensure CSRF checks pass
 
-        with self.settings(
-            STRIPE_WEBHOOK_SECRET=sample_webhook_secret, BILLING_TRIAL_DAYS=30
-        ):
+        with self.settings(STRIPE_WEBHOOK_SECRET=sample_webhook_secret, BILLING_TRIAL_DAYS=30):
 
             response = csrf_client.post(
-                "/billing/stripe_webhook",
-                body,
-                content_type="text/plain",
-                HTTP_STRIPE_SIGNATURE=signature,
+                "/billing/stripe_webhook", body, content_type="text/plain", HTTP_STRIPE_SIGNATURE=signature,
             )
             self.assertEqual(response.status_code, status.HTTP_200_OK)
 
@@ -307,25 +384,28 @@ class TestStripeWebhooks(TransactionBaseTest, PlanTestMixin):
             customer="cus_MeteredI2MVxJI",
             items=[{"price": "price_zyxwvu"}],
             trial_period_days=30,
-            billing_cycle_anchor=datetime.datetime(
-                2021, 1, 1, 23, 59, 59, 999999, tzinfo=pytz.UTC,
-            ),
+            billing_cycle_anchor=datetime.datetime(2021, 1, 1, 23, 59, 59, 999999, tzinfo=pytz.UTC,),
         )
 
         # Check that the instance is correctly updated
         instance.refresh_from_db()
         self.assertEqual(instance.billing_period_ends, None)  # this is not changed
         self.assertEqual(
-            instance.stripe_subscription_item_id, "si_1a2b3c4d"
+            instance.stripe_subscription_item_id, "si_1a2b3c4d",
         )  # subscription ID is updated after subscription is created
 
         # Check that the payment is cancelled (i.e. not captured)
         cancel_payment_intent.assert_called_once_with("pi_TxLb1HS1CyhnDR")
 
+        # Assert that special analytics event is fired
+        mock_capture.assert_called_with(
+            user.distinct_id,
+            "billing card validated",
+            {"plan_key": "metered", "billing_period_ends": None, "organization_id": str(organization.id)},
+        )
+
     @patch("multi_tenancy.views.capture_message")
-    def test_initial_webhook_with_more_than_one_subscription_item(
-        self, capture_message
-    ):
+    def test_initial_webhook_with_more_than_one_subscription_item(self, capture_message):
         """
         Tests behavior of receiving webhook with more than one subscription items where the
         stored stripe_subscription_item_id has not been set (i.e. initial webhook).
@@ -335,9 +415,7 @@ class TestStripeWebhooks(TransactionBaseTest, PlanTestMixin):
 
         organization, team, user = self.create_org_team_user()
         instance = OrganizationBilling.objects.create(
-            organization=organization,
-            should_setup_billing=True,
-            stripe_customer_id="cus_111dEDNOcmq",
+            organization=organization, should_setup_billing=True, stripe_customer_id="cus_111dEDNOcmq",
         )
 
         body: str = """
@@ -374,15 +452,10 @@ class TestStripeWebhooks(TransactionBaseTest, PlanTestMixin):
 
         signature: str = self.generate_webhook_signature(body, sample_webhook_secret)
 
-        csrf_client = Client(
-            enforce_csrf_checks=True,
-        )  # Custom client to ensure CSRF checks pass
+        csrf_client = Client(enforce_csrf_checks=True,)  # Custom client to ensure CSRF checks pass
         with self.settings(STRIPE_WEBHOOK_SECRET=sample_webhook_secret):
             response = csrf_client.post(
-                "/billing/stripe_webhook",
-                body,
-                content_type="text/plain",
-                HTTP_STRIPE_SIGNATURE=signature,
+                "/billing/stripe_webhook", body, content_type="text/plain", HTTP_STRIPE_SIGNATURE=signature,
             )
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
@@ -390,22 +463,18 @@ class TestStripeWebhooks(TransactionBaseTest, PlanTestMixin):
         # Check that the period end was updated and subscription ID saved
         instance.refresh_from_db()
         self.assertEqual(
-            instance.billing_period_ends,
-            timezone.datetime(2020, 8, 7, 12, 28, 15, tzinfo=pytz.UTC),
+            instance.billing_period_ends, timezone.datetime(2020, 8, 7, 12, 28, 15, tzinfo=pytz.UTC),
         )
         self.assertEqual(instance.stripe_subscription_item_id, "si_01234567890")
 
         capture_message.assert_called_once()
         self.assertIn(
-            "Stripe invoice.payment_succeeded webhook contained more than 1 item",
-            capture_message.call_args[0][0],
+            "Stripe invoice.payment_succeeded webhook contained more than 1 item", capture_message.call_args[0][0],
         )
         self.assertEqual(capture_message.call_args[0][1], "warning")
 
     @patch("multi_tenancy.views.capture_message")
-    def test_webhook_with_more_than_one_subscription_item_and_matching_id_is_found(
-        self, capture_message
-    ):
+    def test_webhook_with_more_than_one_subscription_item_and_matching_id_is_found(self, capture_message):
         """
         Tests behavior of receiving webhook with more than one subscription items where the
         stored stripe_subscription_item_id has been set, and one of the items **does** match the subscription on file.
@@ -454,15 +523,10 @@ class TestStripeWebhooks(TransactionBaseTest, PlanTestMixin):
 
         signature: str = self.generate_webhook_signature(body, sample_webhook_secret)
 
-        csrf_client = Client(
-            enforce_csrf_checks=True,
-        )  # Custom client to ensure CSRF checks pass
+        csrf_client = Client(enforce_csrf_checks=True,)  # Custom client to ensure CSRF checks pass
         with self.settings(STRIPE_WEBHOOK_SECRET=sample_webhook_secret):
             response = csrf_client.post(
-                "/billing/stripe_webhook",
-                body,
-                content_type="text/plain",
-                HTTP_STRIPE_SIGNATURE=signature,
+                "/billing/stripe_webhook", body, content_type="text/plain", HTTP_STRIPE_SIGNATURE=signature,
             )
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
@@ -470,12 +534,9 @@ class TestStripeWebhooks(TransactionBaseTest, PlanTestMixin):
         # Check that the period end was updated and subscription ID saved
         instance.refresh_from_db()
         self.assertEqual(
-            instance.billing_period_ends,
-            timezone.datetime(2020, 12, 8, 18, 53, 27, tzinfo=pytz.UTC),
+            instance.billing_period_ends, timezone.datetime(2020, 12, 8, 18, 53, 27, tzinfo=pytz.UTC),
         )
-        self.assertEqual(
-            instance.stripe_subscription_item_id, "si_abcdefghi"
-        )  # Subscription ID does not change
+        self.assertEqual(instance.stripe_subscription_item_id, "si_abcdefghi")  # Subscription ID does not change
 
         capture_message.assert_not_called()  # No exceptions/messages are logged
 
@@ -485,9 +546,7 @@ class TestStripeWebhooks(TransactionBaseTest, PlanTestMixin):
 
         organization, team, user = self.create_org_team_user()
         instance: OrganizationBilling = OrganizationBilling.objects.create(
-            organization=organization,
-            should_setup_billing=True,
-            stripe_customer_id="cus_bEDNOHbSpxHcmq",
+            organization=organization, should_setup_billing=True, stripe_customer_id="cus_bEDNOHbSpxHcmq",
         )
 
         body = """
@@ -521,10 +580,7 @@ class TestStripeWebhooks(TransactionBaseTest, PlanTestMixin):
         with self.settings(STRIPE_WEBHOOK_SECRET=sample_webhook_secret):
 
             response = self.client.post(
-                "/billing/stripe_webhook",
-                body,
-                content_type="text/plain",
-                HTTP_STRIPE_SIGNATURE=signature,
+                "/billing/stripe_webhook", body, content_type="text/plain", HTTP_STRIPE_SIGNATURE=signature,
             )
             self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
 
@@ -539,9 +595,7 @@ class TestStripeWebhooks(TransactionBaseTest, PlanTestMixin):
 
         organization, team, user = self.create_org_team_user()
         instance: OrganizationBilling = OrganizationBilling.objects.create(
-            organization=organization,
-            should_setup_billing=True,
-            stripe_customer_id="cus_dEDNOHbSpxHcmq",
+            organization=organization, should_setup_billing=True, stripe_customer_id="cus_dEDNOHbSpxHcmq",
         )
 
         invalid_payload_1: str = "Not a JSON?"
@@ -621,10 +675,7 @@ class TestStripeWebhooks(TransactionBaseTest, PlanTestMixin):
 
         with self.settings(STRIPE_WEBHOOK_SECRET=sample_webhook_secret):
             response = self.client.post(
-                "/billing/stripe_webhook",
-                body,
-                content_type="text/plain",
-                HTTP_STRIPE_SIGNATURE=signature,
+                "/billing/stripe_webhook", body, content_type="text/plain", HTTP_STRIPE_SIGNATURE=signature,
             )
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
@@ -680,10 +731,7 @@ class TestStripeWebhooks(TransactionBaseTest, PlanTestMixin):
 
         with self.settings(STRIPE_WEBHOOK_SECRET=sample_webhook_secret):
             response = self.client.post(
-                "/billing/stripe_webhook",
-                body,
-                content_type="text/plain",
-                HTTP_STRIPE_SIGNATURE=signature,
+                "/billing/stripe_webhook", body, content_type="text/plain", HTTP_STRIPE_SIGNATURE=signature,
             )
 
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
@@ -691,7 +739,6 @@ class TestStripeWebhooks(TransactionBaseTest, PlanTestMixin):
 
         capture_message.assert_called_once()
         self.assertIn(
-            "Stripe webhook does not match subscription on file",
-            capture_message.call_args[0][0],
+            "Stripe webhook does not match subscription on file", capture_message.call_args[0][0],
         )
         self.assertEqual(capture_message.call_args[0][1], "error")

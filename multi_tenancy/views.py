@@ -23,6 +23,7 @@ from rest_framework.viewsets import GenericViewSet, ModelViewSet
 from sentry_sdk import capture_exception, capture_message
 
 import stripe
+from multi_tenancy.tasks import report_card_validated, report_invoice_payment_succeeded
 
 from .models import OrganizationBilling, Plan
 from .serializers import BillingSubscribeSerializer, MultiTenancyOrgSignupSerializer, PlanSerializer
@@ -205,6 +206,9 @@ def stripe_webhook(request: HttpRequest) -> JsonResponse:
             # Stripe sets period_end = period_start because they manage these attributes on an accrual-basis
             line_items = event["data"]["object"]["lines"]["data"]
             line_item = None
+            is_billing_inception = (
+                not instance.billing_period_ends
+            )  # first time (or reactivation) of billing agreement (i.e. not continuing use)
 
             if instance.stripe_subscription_item_id:
                 for _item in line_items:
@@ -232,21 +236,26 @@ def stripe_webhook(request: HttpRequest) -> JsonResponse:
                 instance.stripe_subscription_item_id = line_item["subscription_item"]
 
             instance.billing_period_ends = datetime.datetime.utcfromtimestamp(line_item["period"]["end"],).replace(
-                tzinfo=pytz.utc
+                tzinfo=pytz.utc,
             )
             instance.should_setup_billing = False
-
             instance.save()
+
+            report_invoice_payment_succeeded.delay(
+                organization_id=instance.organization.id, initial=is_billing_inception,
+            )
 
         # Special handling for plans that only do card validation (e.g. startup or metered-billing plans)
         elif event["type"] == "payment_intent.amount_capturable_updated":
-            instance.handle_post_card_validation()
+            instance = instance.handle_post_card_validation()
 
             # Attempt to cancel the validation charge
             try:
                 cancel_payment_intent(event["data"]["object"]["id"])
             except stripe.error.StripeError as e:
                 capture_exception(e)
+
+            report_card_validated(organization_id=instance.organization.id)
 
     except KeyError:
         # Malformed request
