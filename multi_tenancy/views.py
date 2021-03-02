@@ -1,11 +1,9 @@
-import datetime
 import json
 import logging
 from distutils.util import strtobool
 from typing import Dict, Optional
 
 import posthoganalytics
-import pytz
 from django.conf import settings
 from django.core.exceptions import ImproperlyConfigured
 from django.http import HttpRequest, HttpResponse, JsonResponse
@@ -16,17 +14,18 @@ from django.utils import timezone
 from django.views.decorators.csrf import csrf_exempt
 from posthog.api.organization import OrganizationSignupViewset
 from posthog.api.user import user
-from posthog.templatetags.posthog_filters import compact_number
 from posthog.urls import render_template
 from rest_framework import mixins, status
 from rest_framework.viewsets import GenericViewSet, ModelViewSet
 from sentry_sdk import capture_exception, capture_message
 
 import stripe
-from multi_tenancy.tasks import report_card_validated, report_invoice_payment_succeeded
+from multi_tenancy.tasks import (report_card_validated,
+                                 update_subscription_billing_period)
 
 from .models import OrganizationBilling, Plan
-from .serializers import BillingSubscribeSerializer, MultiTenancyOrgSignupSerializer, PlanSerializer
+from .serializers import (BillingSubscribeSerializer,
+                          MultiTenancyOrgSignupSerializer, PlanSerializer)
 from .stripe import cancel_payment_intent, customer_portal_url, parse_webhook
 from .utils import get_cached_monthly_event_usage
 
@@ -157,7 +156,7 @@ def billing_welcome_view(request: HttpRequest):
 
     if session_id:
         try:
-            organization_billing = OrganizationBilling.objects.get(stripe_checkout_session=session_id,)
+            organization_billing = OrganizationBilling.objects.get(stripe_checkout_session=session_id)
         except OrganizationBilling.DoesNotExist:
             pass
         else:
@@ -202,48 +201,24 @@ def stripe_webhook(request: HttpRequest) -> JsonResponse:
             return response
 
         if event["type"] == "invoice.payment_succeeded":
-            # We have to use the period from the invoice line items because on the first month
-            # Stripe sets period_end = period_start because they manage these attributes on an accrual-basis
-            line_items = event["data"]["object"]["lines"]["data"]
-            line_item = None
-            is_billing_inception = (
-                not instance.billing_period_ends
-            )  # first time (or reactivation) of billing agreement (i.e. not continuing use)
+            subscription_id: str = event["data"]["object"]["subscription"]
 
-            if instance.stripe_subscription_item_id:
-                for _item in line_items:
-                    if instance.stripe_subscription_item_id == _item["subscription_item"]:
-                        line_item = _item
-
-                if line_item is None:
+            if instance.stripe_subscription_id:
+                if instance.stripe_subscription_id != subscription_id:
                     capture_message(
                         "Stripe webhook does not match subscription on file "
-                        f"({instance.stripe_subscription_item_id}): {json.dumps(event)}",
+                        f"({instance.stripe_subscription_id}): {json.dumps(event)}",
                         "error",
                     )
                     return error_response
             else:
-                if len(line_items) > 1:
-                    # This is unexpected behavior, while the code will continue by using only the first item,
-                    # this is logged to be properly addressed.
-                    capture_message(
-                        f"Stripe invoice.payment_succeeded webhook contained more than 1 item: {json.dumps(event)}",
-                        "warning",
-                    )
+                # First time receiving the subscription_id, record it
+                instance.stripe_subscription_id = subscription_id
 
-                # First time receiving the subscription_item ID, record it
-                line_item = line_items[0]
-                instance.stripe_subscription_item_id = line_item["subscription_item"]
-
-            instance.billing_period_ends = datetime.datetime.utcfromtimestamp(line_item["period"]["end"],).replace(
-                tzinfo=pytz.utc,
-            )
             instance.should_setup_billing = False
             instance.save()
 
-            report_invoice_payment_succeeded.delay(
-                organization_id=instance.organization.id, initial=is_billing_inception,
-            )
+            update_subscription_billing_period.delay(organization_id=instance.organization.id)
 
         # Special handling for plans that only do card validation (e.g. startup or metered-billing plans)
         elif event["type"] == "payment_intent.amount_capturable_updated":
