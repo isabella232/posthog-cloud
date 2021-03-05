@@ -26,6 +26,16 @@ def _get_customer_id(customer_id: str, email: str = "") -> str:
     return stripe.Customer.create(email=email).id
 
 
+def set_default_payment_method_for_customer(customer_id: str, payment_method_id: str) -> bool:
+    _init_stripe()
+    return (
+        stripe.Customer.modify(
+            customer_id, invoice_settings={"default_payment_method": payment_method_id}
+        ).invoice_settings.default_payment_method
+        == payment_method_id
+    )
+
+
 def create_subscription_checkout_session(
     email: str, base_url: str, price_id: str = "", customer_id: str = "",
 ) -> Tuple[str, str]:
