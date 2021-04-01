@@ -2,17 +2,11 @@ from django.core import mail
 from django.db.utils import IntegrityError
 from messaging.models import UserMessagingRecord
 from messaging.tasks import check_and_send_no_event_ingestion_follow_up
-from posthog.api.test.base import BaseTest
+from multi_tenancy.tests.base import CloudBaseTest
 from posthog.models import Event, Team, User
 
 
-class TestMessaging(BaseTest):
-    def setUp(self):
-        super().setUp()
-        self.organization, self.team, self.user = User.objects.bootstrap(
-            organization_name="Test", email="test@posthog.com", password=None, first_name="John Test",
-        )
-
+class TestMessaging(CloudBaseTest):
     def test_cannot_send_the_same_campaign_twice_to_the_same_user(self):
         user: User = User.objects.create(email="valid@posthog.com")
         UserMessagingRecord.objects.create(user=user, campaign="test_campaign")
@@ -24,13 +18,16 @@ class TestMessaging(BaseTest):
         )
 
     def test_check_and_send_no_event_ingestion_follow_up(self):
+        self.user.first_name = "John Test"
+        self.user.save()
+
         with self.settings(SITE_URL="https://app.posthog.com"):
             check_and_send_no_event_ingestion_follow_up(self.user.pk)
 
         self.assertEqual(len(mail.outbox), 1)
         self.assertEqual(mail.outbox[0].subject, "Product insights with PostHog are waiting for you")
         self.assertEqual(mail.outbox[0].from_email, "PostHog Team <hey@posthog.com>")
-        self.assertEqual(mail.outbox[0].to, ["John Test <test@posthog.com>"])
+        self.assertEqual(mail.outbox[0].to, ["John Test <user1@posthog.com>"])
         self.assertIn(
             "haven't started receiving events yet", mail.outbox[0].body,
         )

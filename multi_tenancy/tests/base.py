@@ -1,18 +1,13 @@
 import random
 import uuid
-from typing import Tuple
 
 from ee.clickhouse.models.event import create_event
 from multi_tenancy.models import Plan
-from posthog.models import Organization, Team, User
+from posthog.models import Team, User
+from posthog.test.base import APIBaseTest, BaseTest
 
 
-class FactoryMixin:
-    def create_org_and_team(self) -> Tuple[Organization, Team]:
-        org = Organization.objects.create()
-        team = Team.objects.create(organization=org)
-        return (org, team)
-
+class CloudMixin:
     def event_factory(self, team: Team, quantity: int = 1):
 
         for _ in range(0, quantity):
@@ -23,15 +18,13 @@ class FactoryMixin:
                 event_uuid=uuid.uuid4(),
             )
 
-
-class PlanTestMixin:
     def create_org_team_user(self):
         return User.objects.bootstrap(
             organization_name="Z",
             first_name="X",
             email=f"user{random.randint(100, 999)}@posthog.com",
-            password=self.TESTS_PASSWORD,
-            team_fields={"api_token": "token789"},
+            password=self.CONFIG_PASSWORD,
+            team_fields={"api_token": f"token_{random.randint(100000, 999999)}"},
         )
 
     def create_plan(self, **kwargs):
@@ -44,3 +37,10 @@ class PlanTestMixin:
             },
         )
 
+
+class CloudBaseTest(CloudMixin, BaseTest):
+    pass
+
+
+class CloudAPIBaseTest(CloudMixin, APIBaseTest):
+    pass
