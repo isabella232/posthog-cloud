@@ -37,11 +37,11 @@ class TestTeamSignup(CloudAPIBaseTest):
         user: User = User.objects.order_by("-pk")[0]
         team: Team = user.teams.first()
         organization: Organization = user.organizations.first()
-        response.data.pop("uuid")
         self.assertEqual(
             response.data,
             {
                 "id": user.pk,
+                "uuid": str(user.uuid),
                 "distinct_id": user.distinct_id,
                 "first_name": "John",
                 "email": "hedgehog@posthog.com",
@@ -246,11 +246,11 @@ class TestTeamSignup(CloudAPIBaseTest):
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
 
         user: User = User.objects.order_by("-pk")[0]
-        response.data.pop("uuid")
         self.assertEqual(
             response.data,
             {
                 "id": user.pk,
+                "uuid": str(user.uuid),
                 "distinct_id": user.distinct_id,
                 "first_name": "John",
                 "email": "multi@posthog.com",
