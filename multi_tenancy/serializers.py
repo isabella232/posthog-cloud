@@ -1,3 +1,4 @@
+from decimal import Decimal
 from typing import Any, Dict, Optional
 
 from django.core.exceptions import ImproperlyConfigured
@@ -7,6 +8,8 @@ from posthog.api.organization import OrganizationSignupSerializer
 from posthog.models import User
 from rest_framework import serializers
 from sentry_sdk import capture_exception
+
+from multi_tenancy.stripe import get_current_usage_bill
 
 from .models import OrganizationBilling, Plan
 from .utils import get_cached_monthly_event_usage
@@ -67,6 +70,8 @@ class BillingSerializer(serializers.ModelSerializer):
     plan = PlanSerializer(read_only=True)
     current_usage = serializers.SerializerMethodField()
     subscription_url = serializers.SerializerMethodField()
+    current_bill_amount = serializers.SerializerMethodField()
+    should_display_current_bill = serializers.SerializerMethodField()
 
     class Meta:
         model = OrganizationBilling
@@ -78,6 +83,8 @@ class BillingSerializer(serializers.ModelSerializer):
             "event_allocation",
             "current_usage",
             "subscription_url",
+            "current_bill_amount",
+            "should_display_current_bill",
         ]
 
     def get_current_usage(self, instance: OrganizationBilling) -> Optional[int]:
@@ -114,6 +121,20 @@ class BillingSerializer(serializers.ModelSerializer):
                         )
 
         return f"/billing/setup?session_id={checkout_session}" if checkout_session else None
+
+    def get_should_display_current_bill(self, instance: OrganizationBilling) -> bool:
+        if instance.is_billing_active and instance.plan.is_metered_billing:
+            return True
+        return False
+
+    def get_current_bill_amount(self, instance: OrganizationBilling) -> Optional[Decimal]:
+        """
+        If the subscription is metered (usage-based), we return the accrued bill amount (in $) for the
+        upcoming not-yet-billed invoice (i.e. usage of the current bill period).
+        """
+        if not instance.is_billing_active or not instance.plan.is_metered_billing:
+            return None
+        return get_current_usage_bill(instance.stripe_subscription_id)
 
 
 class BillingSubscribeSerializer(serializers.Serializer):

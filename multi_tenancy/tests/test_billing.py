@@ -4,6 +4,7 @@ import uuid
 from typing import Dict
 from unittest.mock import MagicMock, patch
 
+import vcr
 from django.core.cache import cache
 from django.core.exceptions import ValidationError
 from django.utils import timezone
@@ -199,6 +200,8 @@ class TestAPIOrganizationBilling(CloudAPIBaseTest):
                 "event_allocation": None,
                 "current_usage": 0,
                 "subscription_url": None,
+                "current_bill_amount": None,
+                "should_display_current_bill": False,
             },
         )
 
@@ -229,6 +232,8 @@ class TestAPIOrganizationBilling(CloudAPIBaseTest):
                 "event_allocation": 7500,
                 "current_usage": 0,
                 "subscription_url": None,
+                "current_bill_amount": None,
+                "should_display_current_bill": False,
             },
         )
 
@@ -259,6 +264,8 @@ class TestAPIOrganizationBilling(CloudAPIBaseTest):
                 "event_allocation": None,
                 "current_usage": 3,
                 "subscription_url": None,
+                "current_bill_amount": None,
+                "should_display_current_bill": False,
             },
         )
 
@@ -580,6 +587,8 @@ class TestAPIOrganizationBilling(CloudAPIBaseTest):
                 "event_allocation": None,
                 "current_usage": 4831,
                 "subscription_url": None,
+                "current_bill_amount": None,
+                "should_display_current_bill": False,
             },
         )
 
@@ -644,7 +653,7 @@ class TestAPIOrganizationBilling(CloudAPIBaseTest):
 
     def test_user_with_no_billing_set_up_cannot_manage_it(self):
 
-        organization, team, user = self.create_org_team_user()
+        organization, _, user = self.create_org_team_user()
         OrganizationBilling.objects.create(
             organization=organization, should_setup_billing=True,
         )
@@ -657,7 +666,7 @@ class TestAPIOrganizationBilling(CloudAPIBaseTest):
     @patch("multi_tenancy.stripe._get_customer_id")
     def test_organization_can_enroll_in_self_serve_plan(self, mock_customer_id):
         mock_customer_id.return_value = "cus_000111222"
-        organization, team, user = self.create_org_team_user()
+        organization, _, user = self.create_org_team_user()
         plan = self.create_plan(self_serve=True)
 
         org_billing = OrganizationBilling.objects.create(
@@ -687,7 +696,7 @@ class TestAPIOrganizationBilling(CloudAPIBaseTest):
         self, mock_customer_id,
     ):
         mock_customer_id.return_value = "cus_000111222"
-        organization, team, user = self.create_org_team_user()
+        organization, _, user = self.create_org_team_user()
         plan = self.create_plan(self_serve=True)
 
         self.client.force_login(user)
@@ -710,7 +719,7 @@ class TestAPIOrganizationBilling(CloudAPIBaseTest):
         self.assertTrue((timezone.now() - org_billing.checkout_session_created_at).total_seconds() <= 2,)
 
     def test_cannot_enroll_in_non_self_serve_plan(self):
-        organization, team, user = self.create_org_team_user()
+        organization, _, user = self.create_org_team_user()
         plan = self.create_plan(self_serve=False)
 
         org_billing = OrganizationBilling.objects.create(organization=organization)
@@ -725,6 +734,79 @@ class TestAPIOrganizationBilling(CloudAPIBaseTest):
         self.assertEqual(org_billing.stripe_checkout_session, "")
         self.assertEqual(org_billing.stripe_customer_id, "")
         self.assertEqual(org_billing.checkout_session_created_at, None)
+
+    # Current bill usage
+
+    @vcr.use_cassette(cassette_library_dir="multi_tenancy/tests/cassettes", filter_headers=["authorization"])
+    def test_can_get_bill_usage_for_current_period(self):
+        organization, _, user = self.create_org_team_user()
+        plan = self.create_plan(key="usage1", is_metered_billing=True)
+        billing_period_ends = timezone.now() + datetime.timedelta(days=30)
+        OrganizationBilling.objects.create(
+            organization=organization,
+            plan=plan,
+            stripe_subscription_id="sub_J2i9v9VdhWbjju",
+            billing_period_ends=billing_period_ends,
+        )
+        self.client.force_login(user)
+
+        response = self.client.get("/api/billing/")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+        response_data = response.json()
+        plan = response_data.pop("plan")
+        self.assertEqual(plan["is_metered_billing"], True)
+
+        self.assertEqual(
+            response_data,
+            {
+                "should_setup_billing": False,
+                "is_billing_active": True,
+                "billing_period_ends": billing_period_ends.isoformat().replace("+00:00", "Z"),
+                "event_allocation": None,
+                "current_usage": 0,
+                "subscription_url": None,
+                "current_bill_amount": 78.23,
+                "should_display_current_bill": True,
+            },
+        )
+
+    def test_non_metered_subscription_does_not_include_bill_usage(self):
+        organization, _, user = self.create_org_team_user()
+        plan = self.create_plan(key="flat-price", is_metered_billing=False)
+        billing_period_ends = timezone.now() + datetime.timedelta(days=30)
+        OrganizationBilling.objects.create(
+            organization=organization,
+            plan=plan,
+            stripe_subscription_id="sub_J2i9v9VdhWbjju",
+            billing_period_ends=billing_period_ends,
+        )
+        self.client.force_login(user)
+
+        response = self.client.get("/api/billing/")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+        self.assertEqual(response.json()["current_bill_amount"], None)
+        self.assertEqual(response.json()["should_display_current_bill"], False)
+
+    @vcr.use_cassette(cassette_library_dir="multi_tenancy/tests/cassettes", filter_headers=["authorization"])
+    def test_failed_request_to_stripe_fails_gracefully(self):
+        organization, _, user = self.create_org_team_user()
+        plan = self.create_plan(key="usage2", is_metered_billing=True)
+        billing_period_ends = timezone.now() + datetime.timedelta(days=30)
+        OrganizationBilling.objects.create(
+            organization=organization,
+            plan=plan,
+            stripe_subscription_id="sub_1234567890",
+            billing_period_ends=billing_period_ends,
+        )
+        self.client.force_login(user)
+
+        response = self.client.get("/api/billing/")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+        self.assertEqual(response.json()["current_bill_amount"], None)
+        self.assertEqual(response.json()["should_display_current_bill"], True)
 
 
 class PlanAPITestCase(CloudAPIBaseTest):
