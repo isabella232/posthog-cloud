@@ -70,8 +70,11 @@ class OrganizationBilling(models.Model):
     )
     stripe_customer_id: models.CharField = models.CharField(max_length=128, blank=True)
     stripe_checkout_session: models.CharField = models.CharField(
-        max_length=128, blank=True,
-    )  # ID of the current checkout session. Only relevant during the setup phase. Use `stripe_subscription_id` afterwards.
+        max_length=128,
+        blank=True,
+        help_text="ID of the current checkout session. Only relevant during the setup phase."
+        " Use `stripe_subscription_id` afterwards.",
+    )
     stripe_subscription_id: models.CharField = models.CharField(
         max_length=128, blank=True,
     )
@@ -83,13 +86,15 @@ class OrganizationBilling(models.Model):
     )
     should_setup_billing: models.BooleanField = models.BooleanField(
         default=False,
-    )  # When this is `True`, the customer will be shown a message prompting them to confirm their billing details on Stripe;
-    # should always be set if the customer hasn't added billing details. Must be set manually if the plan is manually assigned.
+        help_text="When this is `True`, the customer will be shown a message prompting them to confirm their"
+        " billing details on Stripe; should **always be set if the customer hasn't added billing details.**"
+        " Must be set manually if the plan is manually assigned.",
+    )
     billing_period_ends: models.DateTimeField = models.DateTimeField(
-        null=True, blank=True,
-    )  # Entails the final date until when this plan will be active.
+        null=True, blank=True, help_text="Final date until when this plan will be active."
+    )
     plan: models.ForeignKey = models.ForeignKey(
-        Plan, on_delete=models.PROTECT, null=True,
+        Plan, on_delete=models.PROTECT, null=True, default=None, blank=True,
     )
 
     @property
@@ -156,8 +161,9 @@ class OrganizationBilling(models.Model):
             self.billing_period_ends = timezone.now() + datetime.timedelta(days=365)
             self.should_setup_billing = False
         elif self.plan.is_metered_billing:
-            subscription_id, _ = create_subscription(price_id=self.plan.price_id, customer_id=self.stripe_customer_id,)
-            self.stripe_subscription_item_id = subscription_id
+            subscription = create_subscription(price_id=self.plan.price_id, customer_id=self.stripe_customer_id)
+            self.stripe_subscription_item_id = subscription["subscription_item_id"]
+            self.stripe_subscription_id = subscription["subscription_id"]
             self.should_setup_billing = False
         self.save()
         return self
