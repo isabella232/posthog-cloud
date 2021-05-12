@@ -157,7 +157,7 @@ class OrganizationBilling(models.Model):
         """
         Handles logic after a card has been validated.
         """
-        if self.plan.key == "startup":
+        if self.plan.key == "startup" or self.plan.key == "flat-5":
             self.billing_period_ends = timezone.now() + datetime.timedelta(days=365)
             self.should_setup_billing = False
         elif self.plan.is_metered_billing:
