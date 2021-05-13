@@ -17,8 +17,6 @@ CLOUD_PRODUCTS = [STARTER, STANDARD]
 NUM_FREE_EVENTS_CLOUD = 1000000
 COST_PER_EVENT_CLOUD = 0.000225
 
-invoices_by_customer = {}
-
 
 def get_forecast_multiplier():
     today = datetime.datetime.today()
@@ -28,6 +26,8 @@ def get_forecast_multiplier():
 
 
 def generate_forecast():
+    invoices_by_customer = {}
+
     has_more = True
     last_seen_sub_id = None
     while has_more:
