@@ -4,6 +4,8 @@ from typing import List, Optional, Tuple
 from django.conf import settings
 from django.db import models
 from django.utils import timezone
+from django.db.models.signals import post_save
+from django.dispatch.dispatcher import receiver
 from ee.models import License
 from posthog.models import Organization, User
 
@@ -167,3 +169,9 @@ class OrganizationBilling(models.Model):
             self.should_setup_billing = False
         self.save()
         return self
+
+@receiver(post_save, sender=OrganizationBilling)
+def organization_billing_saved(sender, instance: OrganizationBilling, created, raw, using, **kwargs):
+    organization = instance.organization
+    organization.update_available_features()
+    organization.save()
