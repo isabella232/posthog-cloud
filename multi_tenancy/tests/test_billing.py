@@ -711,7 +711,7 @@ class TestAPIOrganizationBilling(CloudAPIBaseTest):
             },
         )
 
-        org_billing = organization.billing
+        org_billing = OrganizationBilling.objects.get(organization=organization)
         self.assertEqual(org_billing.stripe_checkout_session, "cs_1234567890")
         self.assertEqual(org_billing.stripe_customer_id, "cus_000111222")
         self.assertEqual(org_billing.plan, plan)
