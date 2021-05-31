@@ -178,7 +178,7 @@ def get_current_usage_bill(subscription_id: str) -> Optional[Decimal]:
 
     try:
         invoice = stripe.Invoice.upcoming(subscription=subscription_id)
-        return Decimal(invoice["amount_due"] / 100) if invoice.get("amount_due") else None
+        return Decimal(invoice["amount_due"] / 100) if invoice.get("amount_due") is not None else None
     except Exception as e:
         capture_exception(e)
         return None

@@ -771,6 +771,30 @@ class TestAPIOrganizationBilling(CloudAPIBaseTest):
             },
         )
 
+    @vcr.use_cassette(cassette_library_dir="multi_tenancy/tests/cassettes", filter_headers=["authorization"])
+    def test_can_get_zero_dollars_bill_usage_for_current_period(self):
+        """
+        Asserts that a $0 invoice is properly handled as $0 and not as error/unavailable.
+        """
+        organization, _, user = self.create_org_team_user()
+        plan = self.create_plan(key="usage1", is_metered_billing=True)
+        billing_period_ends = timezone.now() + datetime.timedelta(days=30)
+        OrganizationBilling.objects.create(
+            organization=organization,
+            plan=plan,
+            stripe_subscription_id="sub_J2i9v9VdhWbjju",
+            billing_period_ends=billing_period_ends,
+        )
+        self.client.force_login(user)
+
+        response = self.client.get("/api/billing/")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+        response_data = response.json()
+        self.assertEqual(
+            response_data["current_bill_amount"], 0,  # Specifically returns `0`, not `None`
+        )
+
     def test_non_metered_subscription_does_not_include_bill_usage(self):
         organization, _, user = self.create_org_team_user()
         plan = self.create_plan(key="flat-price", is_metered_billing=False)
