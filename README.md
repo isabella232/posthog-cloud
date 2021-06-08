@@ -36,7 +36,9 @@ Below you'll find the recommended steps to run locally. While running everything
    ```
 1. You can run the server by running,
    ```bash
-   cd deploy && bin/start
+   cd deploy
+   DEBUG=1 python manage.py migrate
+   ./bin/start
    ```
 1. **Alternatively**, you can just run the local tests by doing
    ```bash
@@ -61,9 +63,10 @@ Below is the documentation for the environment variables specifically scoped to 
 - `BILLING_TRIAL_DAYS`. Number of days (integer) to set up a trial for on each new metered or tiered-based subscription. Can be set to `0` for no trial.
 - `BILLING_NO_PLAN_EVENT_ALLOCATION`. Number of events allocated to an organization with no active billing plan (i.e. number of events for free). `None` means unlimited free allocation, `0` means no allocation.
 
-
 ## Additional docs
+
 Some features particular to this repo are documented below.
+
 - [Billing](docs/Billing.md)
 
 ## Questions?
