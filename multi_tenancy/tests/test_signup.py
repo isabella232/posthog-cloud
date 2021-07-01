@@ -65,6 +65,7 @@ class TestTeamSignup(CloudAPIBaseTest):
             "new_onboarding_enabled": False,
             "signup_backend_processor": "OrganizationSignupSerializer",
             "signup_social_provider": "",
+            "realm": "cloud",
         }
         mock_capture.assert_called_once_with(
             user.distinct_id, "user signed up", properties=analytics_props,
@@ -135,6 +136,7 @@ class TestTeamSignup(CloudAPIBaseTest):
                 "new_onboarding_enabled": False,
                 "signup_backend_processor": "OrganizationSignupSerializer",
                 "signup_social_provider": "",
+                "realm": "cloud",
             },
         )
 
@@ -191,6 +193,7 @@ class TestTeamSignup(CloudAPIBaseTest):
                 "new_onboarding_enabled": False,
                 "signup_backend_processor": "OrganizationSignupSerializer",
                 "signup_social_provider": "",
+                "realm": "cloud",
             },
         )
 
@@ -223,6 +226,7 @@ class TestTeamSignup(CloudAPIBaseTest):
                 "new_onboarding_enabled": False,
                 "signup_backend_processor": "OrganizationSignupSerializer",
                 "signup_social_provider": "",
+                "realm": "cloud",
             },
         )
 
@@ -272,6 +276,7 @@ class TestTeamSignup(CloudAPIBaseTest):
                 "new_onboarding_enabled": False,
                 "signup_backend_processor": "OrganizationSignupSerializer",
                 "signup_social_provider": "",
+                "realm": "cloud",
             },
         )
 
