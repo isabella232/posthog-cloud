@@ -4,7 +4,7 @@ from typing import Any, Dict, Optional
 from django.core.exceptions import ImproperlyConfigured
 from django.utils import timezone
 from messaging.tasks import process_organization_signup_messaging
-from posthog.api.organization import OrganizationSignupSerializer
+from posthog.api.signup import SignupSerializer
 from posthog.models import User
 from rest_framework import serializers
 from sentry_sdk import capture_exception
@@ -23,7 +23,7 @@ class ReadOnlySerializer(serializers.ModelSerializer):
         raise NotImplementedError()
 
 
-class MultiTenancyOrgSignupSerializer(OrganizationSignupSerializer):
+class MultiTenancyOrgSignupSerializer(SignupSerializer):
     plan = serializers.CharField(max_length=32, required=False)
 
     def validate_plan(self, data: Dict) -> Optional[Plan]:

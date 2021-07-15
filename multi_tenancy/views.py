@@ -10,7 +10,7 @@ from django.shortcuts import redirect
 from django.template.exceptions import TemplateDoesNotExist
 from django.template.loader import get_template
 from django.views.decorators.csrf import csrf_exempt
-from posthog.api.organization import OrganizationSignupViewset
+from posthog.api.signup import SignupViewset
 from posthog.urls import render_template
 from rest_framework import mixins, status
 from rest_framework.viewsets import GenericViewSet, ModelViewSet
@@ -26,7 +26,7 @@ from .stripe import cancel_payment_intent, customer_portal_url, parse_webhook, s
 logger = logging.getLogger(__name__)
 
 
-class MultiTenancyOrgSignupViewset(OrganizationSignupViewset):
+class MultiTenancyOrgSignupViewset(SignupViewset):
     serializer_class = MultiTenancyOrgSignupSerializer
 
 
