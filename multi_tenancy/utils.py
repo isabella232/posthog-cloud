@@ -12,6 +12,7 @@ from posthog.models import Organization, Team
 
 EVENT_USAGE_CACHING_TTL: int = settings.EVENT_USAGE_CACHING_TTL
 
+useless_thing = 1
 
 def get_event_usage_for_timerange(
     organization: Organization,
