@@ -8,54 +8,41 @@ jobs:
     name: Main repository tests
     runs-on: ubuntu-latest
 
-    services:
-      postgres:
-        image: postgres:12
-        env:
-          POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: postgres
-          POSTGRES_DB: postgres
-        ports: ["5432:5432"]
-        options: --health-cmd pg_isready --health-interval 10s --health-timeout 5s --health-retries 5
-      clickhouse-server:
-        image: yandex/clickhouse-server
-        ports:
-          - "8123:8123"
-          - "9000:9000"
-          - "9440:9440"
-          - "9009:9009"
-
     steps:
       - uses: actions/checkout@v2
-
-      - name: Set up Python 3.8
-        uses: actions/setup-python@v2
-        with:
-          python-version: "3.8"
 
       - name: Fetch posthog main repo
         run: bin/pull_main
 
-      - name: Set up dependencies caching
-        uses: actions/cache@v2
-        with:
-          path: ~/.cache/pip
-          key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt', '**/requirements/*.txt') }}
-          restore-keys: |
-            ${{ runner.os }}-pip-
+      - name: Start stack with Docker Compose
+        run: docker-compose -f deploy/ee/docker-compose.ch.yml up -d db clickhouse
 
-      - name: Install dependencies
+      - name: Set up Python 3.8
+        uses: actions/setup-python@v2
+        with:
+          python-version: 3.8
+
+      - uses: syphar/restore-virtualenv@v1
+        id: cache-backend-tests
+      - uses: syphar/restore-pip-download-cache@v1
+        if: steps.cache-backend-tests.outputs.cache-hit != 'true'
+      - name: Install python dependencies
+        if: steps.cache-backend-tests.outputs.cache-hit != 'true'
         run: |
-          cd deploy
-          python -m pip install --upgrade pip
-          python -m pip install -r requirements.txt
-          python -m pip install freezegun fakeredis pytest pytest_mock pytest-django
-        if: steps.cache.outputs.cache-hit != 'true'
+          python -m pip install -r deploy/requirements-dev.txt
+          python -m pip install -r deploy/requirements.txt
+
+      - name: Run migrations
+        env:
+          SECRET_KEY: "6b01eee4f945ca25045b5aab440b953461faf08693a9abbf1166dc7c6b9772da" # unsafe - for testing only
+          DATABASE_URL: "postgres://posthog:posthog@localhost:5432/posthog"
+          REDIS_URL: "redis://localhost"
+        run: python deploy/manage.py migrate
 
       - name: Run posthog tests
         env:
           SECRET_KEY: "6b01eee4f945ca25045b5aab440b953461faf08693a9abbf1166dc7c6b9772da" # unsafe - for testing only
-          DATABASE_URL: "postgres://postgres:postgres@localhost:${{ job.services.postgres.ports[5432] }}/postgres"
+          DATABASE_URL: "postgres://posthog:posthog@localhost:5432/posthog"
           REDIS_URL: "redis://localhost"
         run: |
           cd deploy
@@ -68,7 +55,7 @@ jobs:
       - name: Run EE tests
         env:
           SECRET_KEY: "6b01eee4f945ca25045b5aab440b953461faf08693a9abbf1166dc7c6b9772da" # unsafe - for testing only
-          DATABASE_URL: "postgres://postgres:postgres@localhost:${{ job.services.postgres.ports[5432] }}/postgres"
+          DATABASE_URL: "postgres://posthog:posthog@localhost:5432/posthog"
           PRIMARY_DB: "clickhouse"
           CLICKHOUSE_HOST: "localhost"
           CLICKHOUSE_DATABASE: "posthog_test"
@@ -81,30 +68,9 @@ jobs:
   cloud:
     name: Local repository tests
     runs-on: ubuntu-latest
-    services:
-      postgres:
-        image: postgres:12
-        env:
-          POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: postgres
-          POSTGRES_DB: postgres
-        ports: ["5432:5432"]
-        options: --health-cmd pg_isready --health-interval 10s --health-timeout 5s --health-retries 5
-      clickhouse-server:
-        image: yandex/clickhouse-server
-        ports:
-          - "8123:8123"
-          - "9000:9000"
-          - "9440:9440"
-          - "9009:9009"
 
     steps:
       - uses: actions/checkout@v2
-
-      - name: Set up Python 3.8
-        uses: actions/setup-python@v2
-        with:
-          python-version: "3.8"
 
       - name: Fetch posthog main repo
         run: |
@@ -112,35 +78,38 @@ jobs:
           cp deploy/ee/conftest.py deploy/messaging/conftest.py
           cp deploy/ee/conftest.py deploy/multi_tenancy/conftest.py
 
-      - name: Set up dependencies caching
-        uses: actions/cache@v2
+      - name: Start stack with Docker Compose
+        run: docker-compose -f deploy/ee/docker-compose.ch.yml up -d db clickhouse
+
+      - name: Set up Python 3.8
+        uses: actions/setup-python@v2
         with:
-          path: ~/.cache/pip
-          key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt', '**/requirements/*.txt') }}
-          restore-keys: |
-            ${{ runner.os }}-pip-
+          python-version: 3.8
 
-      - name: Install dependencies
+      - uses: syphar/restore-virtualenv@v1
+        id: cache-backend-tests
+      - uses: syphar/restore-pip-download-cache@v1
+        if: steps.cache-backend-tests.outputs.cache-hit != 'true'
+      - name: Install python dependencies
+        if: steps.cache-backend-tests.outputs.cache-hit != 'true'
         run: |
-          cd deploy
-          python -m pip install --upgrade pip
-          python -m pip install -r requirements.txt
-          python -m pip install freezegun fakeredis pytest pytest-django
-        if: steps.cache.outputs.cache-hit != 'true'
+          python -m pip install -r deploy/requirements-dev.txt
+          python -m pip install -r deploy/requirements.txt
 
-      - name: Check migrations
+      - name: Check migrations & migrate
         env:
           SECRET_KEY: "6b01eee4f945ca25045b5aab440b953461faf08693a9abbf1166dc7c6b9772da" # unsafe - for testing only
-          DATABASE_URL: "postgres://postgres:postgres@localhost:${{ job.services.postgres.ports[5432] }}/postgres"
+          DATABASE_URL: "postgres://posthog:posthog@localhost:5432/posthog"
           REDIS_URL: "redis://localhost"
         run: |
           cd deploy
           python manage.py makemigrations --check --dry-run
+          python manage.py migrate
 
       - name: Run cloud tests (posthog-production)
         env:
           SECRET_KEY: "6b01eee4f945ca25045b5aab440b953461faf08693a9abbf1166dc7c6b9772da" # unsafe - for testing only
-          DATABASE_URL: "postgres://postgres:postgres@localhost:${{ job.services.postgres.ports[5432] }}/postgres"
+          DATABASE_URL: "postgres://posthog:posthog@localhost:5432/posthog"
           STRIPE_API_KEY: "sk_test_987654321"
           STRIPE_PUBLISHABLE_KEY: "pk_test_987654321"
           REDIS_URL: "redis://localhost"
