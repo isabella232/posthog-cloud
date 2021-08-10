@@ -1,17 +1,22 @@
 import calendar
 import datetime
-from typing import Optional, Tuple
+from typing import List, Optional, Tuple
 
+import re
 import pytz
 from dateutil.relativedelta import relativedelta
 from django.conf import settings
 from django.core.cache import cache
 from django.utils import timezone
+from rest_framework import status
+from rest_framework.response import Response
 from ee.clickhouse.client import sync_execute
 from posthog.models import Organization, Team
 
 EVENT_USAGE_CACHING_TTL: int = settings.EVENT_USAGE_CACHING_TTL
 
+CORS_ORIGIN_REGEX = r"https:\/\/(\w*\.)?posthog.com\/?$"
+EMAIL_REGEX = r"(?:[a-z0-9!#$%&'*+/=?^_`{|}~-]+(?:\.[a-z0-9!#$%&'*+/=?^_`{|}~-]+)*|\"(?:[\x01-\x08\x0b\x0c\x0e-\x1f\x21\x23-\x5b\x5d-\x7f]|\\[\x01-\x09\x0b\x0c\x0e-\x7f])*\")@(?:(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+[a-z0-9](?:[a-z0-9-]*[a-z0-9])?|\[(?:(?:(2(5[0-5]|[0-4][0-9])|1[0-9][0-9]|[1-9]?[0-9]))\.){3}(?:(2(5[0-5]|[0-4][0-9])|1[0-9][0-9]|[1-9]?[0-9])|[a-z0-9-]*[a-z0-9]:(?:[\x01-\x08\x0b\x0c\x0e-\x1f\x21-\x5a\x53-\x7f]|\\[\x01-\x09\x0b\x0c\x0e-\x7f])+)\])"
 
 def get_event_usage_for_timerange(
     organization: Organization,
@@ -118,3 +123,32 @@ def get_billing_cycle_anchor(at_date: datetime.datetime) -> datetime.datetime:
     return datetime.datetime.combine(
         anchor_date.replace(day=1), datetime.time.max,
     ).replace(tzinfo=pytz.UTC)
+
+def is_cors_origin_ok(origin: str) -> bool:
+    if not origin:
+        return False
+
+    return settings.DEBUG or bool(re.match(CORS_ORIGIN_REGEX, origin))
+
+def transform_response_add_cors(response: Response, origin: str, allowed_methods: List[str]) -> Response:
+    response["Access-Control-Allow-Origin"] = origin
+    response["Access-Control-Allow-Methods"] = ",".join(allowed_methods)
+    response["Access-Control-Allow-Headers"] = "*"
+    return response
+
+def get_error_status(e: Exception):
+    if e.__class__.__name__ == "ValueError":
+        return status.HTTP_400_BAD_REQUEST
+    if e.__class__.__name__ == "ApiException":
+        return e.status
+    return status.HTTP_500_INTERNAL_SERVER_ERROR
+
+def trim_and_validate_email(email: str):
+    if not email:
+        raise ValueError("Email not provided")
+    email = email.strip().lower()
+    is_valid = bool(re.match(EMAIL_REGEX, email))
+    if not is_valid:
+        raise ValueError("Email is invalid")
+    return email
+

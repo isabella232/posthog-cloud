@@ -1,0 +1,69 @@
+interactions:
+- request:
+    body: '{"properties": {"email": "test+thingie@posthog.com", "nonexistent_property":
+      "value"}}'
+    headers:
+      Accept:
+      - application/json
+      Content-Type:
+      - application/json
+      User-Agent:
+      - hubspot-api-client-python; 3.8.2
+    method: PATCH
+    uri: https://api.hubapi.com/crm/v3/objects/contacts/test%2Bthingie%40posthog.com?idProperty=email&hapikey=hubspot_test_abcdef0123456789
+  response:
+    body:
+      string: '{"status":"error","message":"Property values were not valid: [{\"isValid\":false,\"message\":\"Property
+        \\\"nonexistent_property\\\" does not exist\",\"error\":\"PROPERTY_DOESNT_EXIST\",\"name\":\"nonexistent_property\"}]","correlationId":"ed8e2643-645b-4a61-96e3-89d999d76857","category":"VALIDATION_ERROR"}'
+    headers:
+      Access-Control-Allow-Credentials:
+      - 'false'
+      CF-Cache-Status:
+      - DYNAMIC
+      CF-Ray:
+      - 6793c5a23f6019a1-EWR
+      Connection:
+      - keep-alive
+      Content-Length:
+      - '308'
+      Content-Type:
+      - application/json;charset=utf-8
+      Date:
+      - Wed, 04 Aug 2021 00:47:01 GMT
+      Expect-CT:
+      - max-age=604800, report-uri="https://report-uri.cloudflare.com/cdn-cgi/beacon/expect-ct"
+      NEL:
+      - '{"report_to":"cf-nel","max_age":604800}'
+      Report-To:
+      - '{"endpoints":[{"url":"https:\/\/a.nel.cloudflare.com\/report\/v3?s=UvN7scCezAJxXhkkLiD3esFH04LZODItTwRTstxuJPtj6OY%2BJ3hHqE7fKacgwY6%2FYtsZIbO%2Fx5fq%2B1%2FNp9H1GpDKumLmFEh0jdXY2xRyvxy%2FIyG81ZSWmJA3r%2BYDxCfs"}],"group":"cf-nel","max_age":604800}'
+      Server:
+      - cloudflare
+      Strict-Transport-Security:
+      - max-age=31536000; includeSubDomains; preload
+      Vary:
+      - Accept-Encoding
+      X-HubSpot-Correlation-Id:
+      - ed8e2643-645b-4a61-96e3-89d999d76857
+      X-HubSpot-RateLimit-Daily:
+      - '500000'
+      X-HubSpot-RateLimit-Daily-Remaining:
+      - '499958'
+      X-HubSpot-RateLimit-Interval-Milliseconds:
+      - '10000'
+      X-HubSpot-RateLimit-Max:
+      - '150'
+      X-HubSpot-RateLimit-Remaining:
+      - '149'
+      X-HubSpot-RateLimit-Secondly:
+      - '15'
+      X-HubSpot-RateLimit-Secondly-Remaining:
+      - '14'
+      X-Trace:
+      - 2B5E8A424A9B6000B56EAA036B214F74C69EC3569E000000000000000000
+      alt-svc:
+      - h3-27=":443"; ma=86400, h3-28=":443"; ma=86400, h3-29=":443"; ma=86400, h3=":443";
+        ma=86400
+    status:
+      code: 400
+      message: Bad Request
+version: 1

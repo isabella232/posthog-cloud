@@ -32,3 +32,7 @@ BILLING_TRIAL_DAYS = get_from_env("BILLING_TRIAL_DAYS", 0, type_cast=int)
 BILLING_NO_PLAN_EVENT_ALLOCATION = get_from_env("BILLING_NO_PLAN_EVENT_ALLOCATION", optional=True, type_cast=int)
 
 MIDDLEWARE.append("multi_tenancy.middleware.PostHogTokenCookieMiddleware")
+
+# HubSpot API key (warning: has full access to organization)
+
+HUBSPOT_API_KEY = os.environ.get("HUBSPOT_API_KEY", "")

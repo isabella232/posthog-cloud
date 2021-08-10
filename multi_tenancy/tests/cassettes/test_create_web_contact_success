@@ -1,0 +1,69 @@
+interactions:
+- request:
+    body: '{"properties": {"email": "test+thingie@posthog.com"}}'
+    headers:
+      Accept:
+      - application/json
+      Content-Type:
+      - application/json
+      User-Agent:
+      - hubspot-api-client-python; 3.8.2
+    method: POST
+    uri: https://api.hubapi.com/crm/v3/objects/contacts?hapikey=hubspot_test_abcdef0123456789
+  response:
+    body:
+      string: '{"id":"1201","properties":{"createdate":"2021-08-04T00:08:20.471Z","email":"test+thingie@posthog.com","hs_email_domain":"posthog.com","hs_is_unworked":"true","hs_marketable_status":"false","hs_marketable_until_renewal":"false","hs_object_id":"1201","lastmodifieddate":"2021-08-04T00:08:20.471Z"},"createdAt":"2021-08-04T00:08:20.471Z","updatedAt":"2021-08-04T00:08:20.471Z","archived":false}'
+    headers:
+      Access-Control-Allow-Credentials:
+      - 'false'
+      CF-Cache-Status:
+      - DYNAMIC
+      CF-Ray:
+      - 67938cf75fd118ae-EWR
+      Connection:
+      - keep-alive
+      Content-Type:
+      - application/json;charset=utf-8
+      Date:
+      - Wed, 04 Aug 2021 00:08:20 GMT
+      Expect-CT:
+      - max-age=604800, report-uri="https://report-uri.cloudflare.com/cdn-cgi/beacon/expect-ct"
+      Location:
+      - https://api.hubapi.com/crm/v3/objects/contacts/1201
+      NEL:
+      - '{"report_to":"cf-nel","max_age":604800}'
+      Report-To:
+      - '{"endpoints":[{"url":"https:\/\/a.nel.cloudflare.com\/report\/v3?s=bAQntC5fMfa0dxaiRxBrkrGBaO0RpOQyuRoGLms9lYovNXNhRuotbrmrPkrMaPJLPq6JQDkzZAP2JCHfUQOx10I0zXcALk4rFBjyla3W5%2BVwWCIKaSEp6V%2F2E%2BHfRhLR"}],"group":"cf-nel","max_age":604800}'
+      Server:
+      - cloudflare
+      Strict-Transport-Security:
+      - max-age=31536000; includeSubDomains; preload
+      Transfer-Encoding:
+      - chunked
+      Vary:
+      - Accept-Encoding
+      X-HubSpot-Correlation-Id:
+      - ecf24b99-276f-4442-8ff6-cece8fc5b2e7
+      X-HubSpot-RateLimit-Daily:
+      - '500000'
+      X-HubSpot-RateLimit-Daily-Remaining:
+      - '499967'
+      X-HubSpot-RateLimit-Interval-Milliseconds:
+      - '10000'
+      X-HubSpot-RateLimit-Max:
+      - '150'
+      X-HubSpot-RateLimit-Remaining:
+      - '149'
+      X-HubSpot-RateLimit-Secondly:
+      - '15'
+      X-HubSpot-RateLimit-Secondly-Remaining:
+      - '14'
+      X-Trace:
+      - 2BDAC15E4776C910E6CD9ACF54A40E21900A458BAE000000000000000000
+      alt-svc:
+      - h3-27=":443"; ma=86400, h3-28=":443"; ma=86400, h3-29=":443"; ma=86400, h3=":443";
+        ma=86400
+    status:
+      code: 201
+      message: Created
+version: 1

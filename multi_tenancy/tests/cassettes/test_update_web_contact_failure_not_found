@@ -1,0 +1,70 @@
+interactions:
+- request:
+    body: '{"properties": {"email": "noreply@does-not-exist.com", "selected_deployment_type":
+      "hosted"}}'
+    headers:
+      Accept:
+      - application/json
+      Content-Type:
+      - application/json
+      User-Agent:
+      - hubspot-api-client-python; 3.8.2
+    method: PATCH
+    uri: https://api.hubapi.com/crm/v3/objects/contacts/noreply%40does-not-exist.com?idProperty=email&hapikey=hubspot_test_abcdef0123456789
+  response:
+    body:
+      string: '{"status":"error","message":"resource not found","correlationId":"fe386ef0-4124-494e-b0a6-30e4d2118317"}'
+    headers:
+      Access-Control-Allow-Credentials:
+      - 'false'
+      CF-Cache-Status:
+      - DYNAMIC
+      CF-Ray:
+      - 6793c2827feb32e4-EWR
+      Connection:
+      - keep-alive
+      Content-Length:
+      - '104'
+      Content-Type:
+      - application/json;charset=utf-8
+      Date:
+      - Wed, 04 Aug 2021 00:44:53 GMT
+      Expect-CT:
+      - max-age=604800, report-uri="https://report-uri.cloudflare.com/cdn-cgi/beacon/expect-ct"
+      NEL:
+      - '{"report_to":"cf-nel","max_age":604800}'
+      Report-To:
+      - '{"endpoints":[{"url":"https:\/\/a.nel.cloudflare.com\/report\/v3?s=u%2FPsKsoMKcx0t9Vdcx8cTAWmqEOpSKu%2BsqM5tAS7AccMXDaUluXOjankst4viuS7aGmdzkEgMd9b5DD6SiyqoaGyaDdCzcLnCE8qurtELFg4yBQDWfE%2BInk6lSb%2BzTOk"}],"group":"cf-nel","max_age":604800}'
+      Server:
+      - cloudflare
+      Strict-Transport-Security:
+      - max-age=31536000; includeSubDomains; preload
+      Vary:
+      - Accept-Encoding
+      X-HubSpot-Correlation-Id:
+      - fe386ef0-4124-494e-b0a6-30e4d2118317
+      X-HubSpot-NotFound:
+      - 'true'
+      X-HubSpot-RateLimit-Daily:
+      - '500000'
+      X-HubSpot-RateLimit-Daily-Remaining:
+      - '499960'
+      X-HubSpot-RateLimit-Interval-Milliseconds:
+      - '10000'
+      X-HubSpot-RateLimit-Max:
+      - '150'
+      X-HubSpot-RateLimit-Remaining:
+      - '149'
+      X-HubSpot-RateLimit-Secondly:
+      - '15'
+      X-HubSpot-RateLimit-Secondly-Remaining:
+      - '14'
+      X-Trace:
+      - 2B4530C1FA2D2F6B6E1541513640A51CB68C5B7350000000000000000000
+      alt-svc:
+      - h3-27=":443"; ma=86400, h3-28=":443"; ma=86400, h3-29=":443"; ma=86400, h3=":443";
+        ma=86400
+    status:
+      code: 404
+      message: Not Found
+version: 1

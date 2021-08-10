@@ -1,5 +1,6 @@
 import json
 import logging
+
 from distutils.util import strtobool
 from typing import Dict, Optional
 
@@ -19,9 +20,15 @@ from sentry_sdk import capture_exception, capture_message
 import stripe
 from multi_tenancy.tasks import report_card_validated, update_subscription_billing_period
 
-from .models import OrganizationBilling, Plan
-from .serializers import BillingSerializer, BillingSubscribeSerializer, MultiTenancyOrgSignupSerializer, PlanSerializer
-from .stripe import cancel_payment_intent, customer_portal_url, parse_webhook, set_default_payment_method_for_customer
+from multi_tenancy.models import OrganizationBilling, Plan
+from multi_tenancy.serializers import BillingSerializer, BillingSubscribeSerializer, MultiTenancyOrgSignupSerializer, PlanSerializer
+from multi_tenancy.stripe import cancel_payment_intent, customer_portal_url, parse_webhook, set_default_payment_method_for_customer
+from multi_tenancy.utils import get_error_status, is_cors_origin_ok, transform_response_add_cors
+from multi_tenancy.hubspot_api import create_contact, update_contact
+from multi_tenancy import constants
+
+from hubspot.crm.contacts import SimplePublicObject
+from hubspot.crm.contacts.exceptions import ApiException
 
 logger = logging.getLogger(__name__)
 
@@ -194,3 +201,67 @@ def plan_template(request: HttpRequest, key: str) -> HttpResponse:
 
     html = template.render(request=request)
     return HttpResponse(html)
+
+@csrf_exempt
+def create_web_contact(request: HttpRequest) -> JsonResponse:
+    origin = request.headers.get("Origin")
+    cors_origin_ok = is_cors_origin_ok(origin)
+    response = JsonResponse({}, status=status.HTTP_200_OK)
+
+    can_write_to_hubspot = \
+        posthoganalytics.feature_enabled(constants.FEATURE_FLAG_CLOUD_WRITES_TO_HUBSPOT, "unauthed-user")
+
+    # If the write to HubSpot flag is disabled, bail out.
+    if not can_write_to_hubspot:
+        response.status_code = status.HTTP_204_NO_CONTENT
+        return response
+
+    if not cors_origin_ok:
+        response.status_code = status.HTTP_401_UNAUTHORIZED
+        return response
+
+    if (request.method == "POST"):
+        try:
+            email = request.POST.get("email")
+            create_contact(email)
+        except Exception as e:
+            capture_exception(e)
+            if settings.DEBUG:
+                print(e)
+            response = JsonResponse({"success": False}, status=get_error_status(e))
+        else:
+            response = JsonResponse({"success": True}, status=status.HTTP_201_CREATED)
+
+    return transform_response_add_cors(response, origin, ["POST"])
+
+@csrf_exempt
+def update_web_contact(request: HttpRequest) -> JsonResponse:
+    origin = request.headers.get("Origin")
+    cors_origin_ok = is_cors_origin_ok(origin)
+    response = JsonResponse({}, status=status.HTTP_200_OK)
+
+    can_write_to_hubspot = \
+        posthoganalytics.feature_enabled(constants.FEATURE_FLAG_CLOUD_WRITES_TO_HUBSPOT, "unauthed-user")
+
+    # If the write to HubSpot flag is disabled, bail out.
+    if not can_write_to_hubspot:
+        response.status_code = status.HTTP_204_NO_CONTENT
+        return response
+
+    if not cors_origin_ok:
+        response.status_code = status.HTTP_401_UNAUTHORIZED
+        return response
+
+    if (request.method == "POST"):
+        try:
+            email = request.POST.get("email")
+            update_contact(email, request.POST)
+        except Exception as e:
+            capture_exception(e)
+            if settings.DEBUG:
+                print(e)
+            response = JsonResponse({"success": False}, status=get_error_status(e))
+        else:
+            response = JsonResponse({"success": True}, status=status.HTTP_200_OK)
+
+    return transform_response_add_cors(response, origin, ["POST"])

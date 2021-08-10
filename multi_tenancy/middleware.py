@@ -1,4 +1,6 @@
 from django.contrib.sessions.middleware import SessionMiddleware
+from django.http.request import HttpRequest
+from ipware import get_client_ip
 
 default_cookie_options = {
     "max_age": 365 * 24 * 60 * 60,  # one year
