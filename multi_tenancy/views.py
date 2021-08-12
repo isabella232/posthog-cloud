@@ -25,7 +25,6 @@ from multi_tenancy.serializers import BillingSerializer, BillingSubscribeSeriali
 from multi_tenancy.stripe import cancel_payment_intent, customer_portal_url, parse_webhook, set_default_payment_method_for_customer
 from multi_tenancy.utils import get_error_status, is_cors_origin_ok, transform_response_add_cors
 from multi_tenancy.hubspot_api import create_contact, update_contact
-from multi_tenancy import constants
 
 from hubspot.crm.contacts import SimplePublicObject
 from hubspot.crm.contacts.exceptions import ApiException
@@ -208,14 +207,6 @@ def create_web_contact(request: HttpRequest) -> JsonResponse:
     cors_origin_ok = is_cors_origin_ok(origin)
     response = JsonResponse({}, status=status.HTTP_200_OK)
 
-    can_write_to_hubspot = \
-        posthoganalytics.feature_enabled(constants.FEATURE_FLAG_CLOUD_WRITES_TO_HUBSPOT, "unauthed-user")
-
-    # If the write to HubSpot flag is disabled, bail out.
-    if not can_write_to_hubspot:
-        response.status_code = status.HTTP_204_NO_CONTENT
-        return response
-
     if not cors_origin_ok:
         response.status_code = status.HTTP_401_UNAUTHORIZED
         return response
@@ -239,14 +230,6 @@ def update_web_contact(request: HttpRequest) -> JsonResponse:
     origin = request.headers.get("Origin")
     cors_origin_ok = is_cors_origin_ok(origin)
     response = JsonResponse({}, status=status.HTTP_200_OK)
-
-    can_write_to_hubspot = \
-        posthoganalytics.feature_enabled(constants.FEATURE_FLAG_CLOUD_WRITES_TO_HUBSPOT, "unauthed-user")
-
-    # If the write to HubSpot flag is disabled, bail out.
-    if not can_write_to_hubspot:
-        response.status_code = status.HTTP_204_NO_CONTENT
-        return response
 
     if not cors_origin_ok:
         response.status_code = status.HTTP_401_UNAUTHORIZED
