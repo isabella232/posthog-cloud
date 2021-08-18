@@ -214,7 +214,8 @@ def create_web_contact(request: HttpRequest) -> JsonResponse:
     if (request.method == "POST"):
         try:
             email = request.POST.get("email")
-            create_contact(email)
+            lead_source = request.POST.get("lead_source", None)
+            create_contact(email=email, lead_source=lead_source)
         except Exception as e:
             capture_exception(e)
             if settings.DEBUG:
