@@ -6,11 +6,12 @@ WORKDIR /code
 # Grab posthog from local (You must have posthog cloned here)
 COPY ./deploy .
 
-# install javascript dependencies
+# install javascript and other system level dependencies
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends curl git build-essential \
-    && curl -sL https://deb.nodesource.com/setup_14.x  | bash - \
-    && apt-get install nodejs -y --no-install-recommends \
+    && apt-get install -y --no-install-recommends 'curl=7.*' 'git=1:2.*' 'build-essential=12.*' \
+    && apt-get install -y --no-install-recommends 'pkg-config=0.*' 'libxml2-dev=2.*' 'libxmlsec1-dev=1.*' 'libxmlsec1-openssl=1.*' \
+    && curl -sL https://deb.nodesource.com/setup_14.x | bash - \
+    && apt-get install -y --no-install-recommends 'nodejs=14.*' \ 
     && npm install -g yarn@1 \
     && yarn config set network-timeout 300000 \
     && yarn --frozen-lockfile \
