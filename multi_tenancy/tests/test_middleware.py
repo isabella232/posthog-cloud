@@ -63,17 +63,17 @@ class TestPostHogTokenCookieMiddleware(CloudAPIBaseTest):
                 "api_key": self.team.api_token,
             },
         )
-        print(response.json())
+
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(0, len(response.cookies))  # no cookies are set
 
         self.client.force_login(self.user)
 
-        response = self.client.get("/api/user/")
+        response = self.client.get("/api/users/@me/")
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(0, len(response.cookies))  # no cookies are set
 
-        response = self.client.patch("/api/user/", {"first_name": "Alice"}, format="json")
+        response = self.client.patch("/api/users/@me/", {"first_name": "Alice"}, format="json")
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(0, len(response.cookies))  # no cookies are set
 

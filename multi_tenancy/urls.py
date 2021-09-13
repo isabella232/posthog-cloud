@@ -12,11 +12,11 @@ from .views import (
     billing_failed_view,
     billing_hosted_view,
     billing_welcome_view,
+    create_web_contact,
     plan_template,
     stripe_billing_portal,
     stripe_checkout_view,
     stripe_webhook,
-    create_web_contact,
     update_web_contact,
 )
 
@@ -47,7 +47,7 @@ urlpatterns: List = [
     opt_slash_path("billing/stripe_webhook", stripe_webhook, name="billing_stripe_webhook"),  # Stripe Webhook
     opt_slash_path("billing/subscribe", BillingSubscribeViewset.as_view({"post": "create"}), name="billing_subscribe"),
     opt_slash_path("create_web_contact", create_web_contact, name="create_web_contact"),
-    opt_slash_path("update_web_contact", update_web_contact, name="update_web_contact")
+    opt_slash_path("update_web_contact", update_web_contact, name="update_web_contact"),
 ]
 
 # Include base `posthog` routes

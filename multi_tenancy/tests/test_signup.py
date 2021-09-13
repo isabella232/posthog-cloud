@@ -76,7 +76,7 @@ class TestTeamSignup(CloudAPIBaseTest):
         )
 
         # Assert that the user is logged in
-        response = self.client.get("/api/user/")
+        response = self.client.get("/api/users/@me/")
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.json()["email"], "hedgehog@posthog.com")
 
@@ -141,7 +141,7 @@ class TestTeamSignup(CloudAPIBaseTest):
         )
 
         # Assert that the user is logged in
-        response = self.client.get("/api/user/")
+        response = self.client.get("/api/users/@me/")
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.json()["email"], "hedgehog5@posthog.com")
 
@@ -281,7 +281,7 @@ class TestTeamSignup(CloudAPIBaseTest):
         )
 
         # Assert that the user is logged in
-        response = self.client.get("/api/user/")
+        response = self.client.get("/api/users/@me/")
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.json()["email"], "multi@posthog.com")
 

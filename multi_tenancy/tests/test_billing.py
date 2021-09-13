@@ -618,13 +618,13 @@ class TestAPIOrganizationBilling(CloudAPIBaseTest):
 
     def test_user_with_no_org(self):
         """
-        Tests the edge case of user not belonging to any organization to make sure the `/api/user` request is handled
-        gracefully.
+        Tests the edge case of user not belonging to any organization to make sure the
+        `/api/users/@me/` request is handled gracefully.
         """
 
         user = User.objects.create(email="alone@posthog.com")
         self.client.force_login(user)
-        response = self.client.post("/api/user/")
+        response = self.client.get("/api/users/@me")
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         response_data: Dict = response.json()
         self.assertEqual(response_data["organization"], None)

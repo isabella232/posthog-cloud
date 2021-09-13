@@ -8,7 +8,7 @@ class TestLogin(CloudAPIBaseTest):
 
     def test_login(self):
         self.client.force_login(self.user)
-        response = self.client.get("/api/user")
+        response = self.client.get("/api/users/@me/")
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.json()["email"], "user1@posthog.com")
 
@@ -17,9 +17,9 @@ class TestLogin(CloudAPIBaseTest):
         teamless_user._team = None
         teamless_user.save()
         self.client.force_login(teamless_user)
-        response = self.client.get("/api/user")
+        response = self.client.get("/api/users/@me/")
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.json()["email"], "user2@posthog.com")
         self.assertEqual(response.json()["team"], None)
-        self.assertEqual(len(response.json()["teams"]), 0)
+        self.assertEqual(len(response.json()["organizations"]), 0)
 
