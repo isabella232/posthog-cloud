@@ -2,6 +2,18 @@ name: CI
 
 on:
   - pull_request
+env:
+    SECRET_KEY: '6b01eee4f945ca25045b5aab440b953461faf08693a9abbf1166dc7c6b9772da' # unsafe - for testing only
+    DATABASE_URL: 'postgres://posthog:posthog@localhost:5432/posthog'
+    REDIS_URL: 'redis://localhost'
+    CLICKHOUSE_HOST: 'localhost'
+    CLICKHOUSE_DATABASE: "posthog_test"
+    CLICKHOUSE_SECURE: 'False'
+    CLICKHOUSE_VERIFY: 'False'
+    STRIPE_API_KEY: "sk_test_987654321"
+    STRIPE_PUBLISHABLE_KEY: "pk_test_987654321"
+    SAML_DISABLED: 1
+    TEST: 1
 
 jobs:
   django:
@@ -15,7 +27,7 @@ jobs:
         run: bin/pull_main
 
       - name: Start stack with Docker Compose
-        run: docker-compose -f deploy/ee/docker-compose.ch.yml up -d db clickhouse
+        run: docker-compose -f deploy/ee/docker-compose.ch.yml up -d db clickhouse zookeeper kafka
 
       - name: Set up Python 3.8
         uses: actions/setup-python@v2
@@ -36,37 +48,27 @@ jobs:
           python -m pip install -r deploy/requirements.txt
 
       - name: Run migrations
-        env:
-          SECRET_KEY: "6b01eee4f945ca25045b5aab440b953461faf08693a9abbf1166dc7c6b9772da" # unsafe - for testing only
-          DATABASE_URL: "postgres://posthog:posthog@localhost:5432/posthog"
-          REDIS_URL: "redis://localhost"
         run: python deploy/manage.py migrate
 
+      - name: Add kafka host to /etc/hosts for kafka connectivity
+        run: sudo echo "127.0.0.1 kafka" | sudo tee -a /etc/hosts
+
       - name: Run posthog tests
-        env:
-          SECRET_KEY: "6b01eee4f945ca25045b5aab440b953461faf08693a9abbf1166dc7c6b9772da" # unsafe - for testing only
-          DATABASE_URL: "postgres://posthog:posthog@localhost:5432/posthog"
-          REDIS_URL: "redis://localhost"
         run: |
           cd deploy
           mkdir -p frontend/dist
           touch frontend/dist/index.html
           touch frontend/dist/layout.html
           touch frontend/dist/shared_dashboard.html
-          pytest posthog/ -m "not skip_on_multitenancy"
+          pytest posthog/ -m "not (skip_on_multitenancy or ee)"
 
       - name: Run EE tests
         env:
-          SECRET_KEY: "6b01eee4f945ca25045b5aab440b953461faf08693a9abbf1166dc7c6b9772da" # unsafe - for testing only
-          DATABASE_URL: "postgres://posthog:posthog@localhost:5432/posthog"
           PRIMARY_DB: "clickhouse"
-          CLICKHOUSE_HOST: "localhost"
-          CLICKHOUSE_DATABASE: "posthog_test"
-          CLICKHOUSE_SECURE: "False"
-          CLICKHOUSE_VERIFY: "False"
         run: |
           cd deploy
           pytest ee/ -m "not skip_on_multitenancy"
+          pytest posthog -m "ee and not skip_on_multitenancy"
 
   cloud:
     name: Local repository tests
@@ -103,10 +105,6 @@ jobs:
           python -m pip install -r deploy/requirements.txt
 
       - name: Check migrations & migrate
-        env:
-          SECRET_KEY: "6b01eee4f945ca25045b5aab440b953461faf08693a9abbf1166dc7c6b9772da" # unsafe - for testing only
-          DATABASE_URL: "postgres://posthog:posthog@localhost:5432/posthog"
-          REDIS_URL: "redis://localhost"
         run: |
           cd deploy
           python manage.py makemigrations --check --dry-run
@@ -114,16 +112,7 @@ jobs:
 
       - name: Run cloud tests (posthog-production)
         env:
-          SECRET_KEY: "6b01eee4f945ca25045b5aab440b953461faf08693a9abbf1166dc7c6b9772da" # unsafe - for testing only
-          DATABASE_URL: "postgres://posthog:posthog@localhost:5432/posthog"
-          STRIPE_API_KEY: "sk_test_987654321"
-          STRIPE_PUBLISHABLE_KEY: "pk_test_987654321"
-          REDIS_URL: "redis://localhost"
           PRIMARY_DB: "clickhouse"
-          CLICKHOUSE_HOST: "localhost"
-          CLICKHOUSE_DATABASE: "posthog_test"
-          CLICKHOUSE_SECURE: "False"
-          CLICKHOUSE_VERIFY: "False"
         run: |
           cd deploy
           mkdir -p frontend/dist
