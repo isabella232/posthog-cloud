@@ -76,10 +76,12 @@ class TestTeamSignup(CloudAPIBaseTest):
         for prop, val in key_analytics_props.items():
             self.assertEqual(event_props[prop], val)
 
-        mock_identify.assert_called_once_with(
-            user.distinct_id,
-            key_analytics_props,
-        )
+        mock_identify.assert_called_once()
+        self.assertEqual(user.distinct_id, mock_identify.call_args.args[0])
+        identify_props = mock_identify.call_args.args[1]
+        for prop, val in key_analytics_props.items():
+            self.assertEqual(identify_props[prop], val)
+
 
         # Assert that the user is logged in
         response = self.client.get("/api/users/@me/")
