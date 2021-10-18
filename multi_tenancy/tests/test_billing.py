@@ -12,6 +12,7 @@ from ee.clickhouse.models.event import create_event
 from freezegun import freeze_time
 from multi_tenancy.models import OrganizationBilling, Plan
 from multi_tenancy.tests.base import CloudAPIBaseTest, CloudBaseTest
+from posthog.constants import AvailableFeature
 from posthog.models import User
 from rest_framework import status
 
@@ -111,33 +112,27 @@ class TestOrganizationBilling(CloudBaseTest):
         billing.save()
         self.assertEqual(billing.available_features, [])
 
-        # Active plan (starter)
+        # Active plan
         billing.billing_period_ends = timezone.now() + datetime.timedelta(seconds=30)
         billing.save()
-        self.assertEqual(billing.available_features, ["organizations_projects"])
 
         # Startup plan
         plan.key = "startup"
         plan.save()
-        self.assertIn("organizations_projects", billing.available_features)
-        self.assertIn("zapier", billing.available_features)
-
-        # Growth plan
-        plan.key = "growth"
-        plan.save()
-        self.assertIn("organizations_projects", billing.available_features)
+        self.assertIn(AvailableFeature.ZAPIER, billing.available_features)
+        self.assertNotIn(AvailableFeature.SAML, billing.available_features)
 
         # Standard plan
         plan.key = "standard"
         plan.save()
-        self.assertIn("organizations_projects", billing.available_features)
-        self.assertIn("zapier", billing.available_features)
+        self.assertIn(AvailableFeature.ZAPIER, billing.available_features)
+        self.assertNotIn(AvailableFeature.SAML, billing.available_features)
 
         # Enterprise plan
         plan.key = "enterprise"
         plan.save()
-        self.assertIn("organizations_projects", billing.available_features)
-        self.assertIn("zapier", billing.available_features)
+        self.assertIn(AvailableFeature.ZAPIER, billing.available_features)
+        self.assertIn(AvailableFeature.SAML, billing.available_features)
 
     def test_feature_available_multi_tenancy(self):
         organization, _, _ = self.create_org_team_user()

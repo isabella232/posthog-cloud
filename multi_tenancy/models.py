@@ -3,19 +3,20 @@ from typing import List, Optional, Tuple
 
 from django.conf import settings
 from django.db import models
-from django.utils import timezone
 from django.db.models.signals import post_save
 from django.dispatch.dispatcher import receiver
+from django.utils import timezone
 from ee.models import License
 from posthog.models import Organization, User
 
-from .stripe import create_subscription, create_subscription_checkout_session, create_zero_auth
+from .stripe import (create_subscription, create_subscription_checkout_session,
+                     create_zero_auth)
 
 PLANS = {
-    "starter": ["organizations_projects"],
-    "growth": License.ENTERPRISE_FEATURES,
-    "startup": License.ENTERPRISE_FEATURES,
-    "standard": License.ENTERPRISE_FEATURES,
+    "starter": ["organizations_projects"], # DEPRECATED
+    "growth": License.SCALE_FEATURES, # DEPRECATED
+    "startup": License.SCALE_FEATURES,
+    "standard": License.SCALE_FEATURES,
     "enterprise": License.ENTERPRISE_FEATURES,
 }
 
@@ -169,6 +170,7 @@ class OrganizationBilling(models.Model):
             self.should_setup_billing = False
         self.save()
         return self
+
 
 @receiver(post_save, sender=OrganizationBilling)
 def organization_billing_saved(sender, instance: OrganizationBilling, created, raw, using, **kwargs):
