@@ -350,8 +350,8 @@ class TestAPIOrganizationBilling(CloudAPIBaseTest):
                 "setup_future_usage": "off_session",
             },
             payment_method_types=["card"],
-            success_url="http://testserver/billing/welcome?session_id={CHECKOUT_SESSION_ID}",
-            cancel_url="http://testserver/billing/failed?session_id={CHECKOUT_SESSION_ID}",
+            success_url="http://testserver/organization/billing/subscribed?s=success",
+            cancel_url="http://testserver/organization/billing/subscribed?s=failed&session_id={CHECKOUT_SESSION_ID}",
         )
 
         response_data: Dict = response.json()
@@ -415,8 +415,8 @@ class TestAPIOrganizationBilling(CloudAPIBaseTest):
                 "setup_future_usage": "off_session",
             },
             payment_method_types=["card"],
-            success_url="http://testserver/billing/welcome?session_id={CHECKOUT_SESSION_ID}",
-            cancel_url="http://testserver/billing/failed?session_id={CHECKOUT_SESSION_ID}",
+            success_url="http://testserver/organization/billing/subscribed?s=success",
+            cancel_url="http://testserver/organization/billing/subscribed?s=failed&session_id={CHECKOUT_SESSION_ID}",
         )
 
         response_data: Dict = response.json()

@@ -1,6 +1,5 @@
 import json
 import logging
-
 from distutils.util import strtobool
 from typing import Dict, Optional
 
@@ -11,6 +10,8 @@ from django.shortcuts import redirect
 from django.template.exceptions import TemplateDoesNotExist
 from django.template.loader import get_template
 from django.views.decorators.csrf import csrf_exempt
+from hubspot.crm.contacts import SimplePublicObject
+from hubspot.crm.contacts.exceptions import ApiException
 from posthog.api.signup import SignupViewset
 from posthog.urls import render_template
 from rest_framework import mixins, status
@@ -18,16 +19,22 @@ from rest_framework.viewsets import GenericViewSet, ModelViewSet
 from sentry_sdk import capture_exception, capture_message
 
 import stripe
-from multi_tenancy.tasks import report_card_validated, update_subscription_billing_period
-
-from multi_tenancy.models import OrganizationBilling, Plan
-from multi_tenancy.serializers import BillingSerializer, BillingSubscribeSerializer, MultiTenancyOrgSignupSerializer, PlanSerializer
-from multi_tenancy.stripe import cancel_payment_intent, customer_portal_url, parse_webhook, set_default_payment_method_for_customer
-from multi_tenancy.utils import get_error_status, is_cors_origin_ok, transform_response_add_cors
 from multi_tenancy.hubspot_api import create_contact, update_contact
-
-from hubspot.crm.contacts import SimplePublicObject
-from hubspot.crm.contacts.exceptions import ApiException
+from multi_tenancy.models import OrganizationBilling, Plan
+from multi_tenancy.serializers import (
+    BillingSerializer,
+    BillingSubscribeSerializer,
+    MultiTenancyOrgSignupSerializer,
+    PlanSerializer,
+)
+from multi_tenancy.stripe import (
+    cancel_payment_intent,
+    customer_portal_url,
+    parse_webhook,
+    set_default_payment_method_for_customer,
+)
+from multi_tenancy.tasks import report_card_validated, update_subscription_billing_period
+from multi_tenancy.utils import get_error_status, is_cors_origin_ok, transform_response_add_cors
 
 logger = logging.getLogger(__name__)
 
@@ -85,31 +92,6 @@ def stripe_billing_portal(request: HttpRequest):
     )
 
     return redirect(url or "/")
-
-
-def billing_welcome_view(request: HttpRequest):
-    session_id = request.GET.get("session_id")
-    extra_args: Dict = {}
-
-    if session_id:
-        try:
-            organization_billing = OrganizationBilling.objects.get(stripe_checkout_session=session_id)
-        except OrganizationBilling.DoesNotExist:
-            pass
-        else:
-            serializer = PlanSerializer()
-            extra_args["plan"] = serializer.to_representation(organization_billing.plan)
-            extra_args["billing_period_ends"] = organization_billing.billing_period_ends
-
-    return render_template("billing-welcome.html", request, extra_args)
-
-
-def billing_failed_view(request: HttpRequest):
-    return render_template("billing-failed.html", request)
-
-
-def billing_hosted_view(request: HttpRequest):
-    return render_template("billing-hosted.html", request)
 
 
 @csrf_exempt
@@ -201,6 +183,7 @@ def plan_template(request: HttpRequest, key: str) -> HttpResponse:
     html = template.render(request=request)
     return HttpResponse(html)
 
+
 @csrf_exempt
 def create_web_contact(request: HttpRequest) -> JsonResponse:
     origin = request.headers.get("Origin")
@@ -211,7 +194,7 @@ def create_web_contact(request: HttpRequest) -> JsonResponse:
         response.status_code = status.HTTP_401_UNAUTHORIZED
         return response
 
-    if (request.method == "POST"):
+    if request.method == "POST":
         try:
             email = request.POST.get("email")
             lead_source = request.POST.get("lead_source", None)
@@ -226,6 +209,7 @@ def create_web_contact(request: HttpRequest) -> JsonResponse:
 
     return transform_response_add_cors(response, origin, ["POST"])
 
+
 @csrf_exempt
 def update_web_contact(request: HttpRequest) -> JsonResponse:
     origin = request.headers.get("Origin")
@@ -236,7 +220,7 @@ def update_web_contact(request: HttpRequest) -> JsonResponse:
         response.status_code = status.HTTP_401_UNAUTHORIZED
         return response
 
-    if (request.method == "POST"):
+    if request.method == "POST":
         try:
             email = request.POST.get("email")
             update_contact(email, request.POST)

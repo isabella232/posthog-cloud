@@ -80,8 +80,8 @@ def create_zero_auth(email: str, base_url: str, customer_id: str = "") -> Tuple[
             "setup_future_usage": "off_session",
         },
         "customer": customer_id,
-        "success_url": base_url + "billing/welcome?session_id={CHECKOUT_SESSION_ID}",
-        "cancel_url": base_url + "billing/failed?session_id={CHECKOUT_SESSION_ID}",
+        "success_url": base_url + "organization/billing/subscribed?s=success",
+        "cancel_url": base_url + "organization/billing/subscribed?s=failed&session_id={CHECKOUT_SESSION_ID}",
     }
 
     session = stripe.checkout.Session.create(**payload)
