@@ -24,6 +24,13 @@ RUN apt-get update \
     && rm -rf node_modules \
     && rm -rf /var/lib/apt/lists/*
 
+# Build plugin-server
+RUN cd plugin-server \
+    && yarn --frozen-lockfile --ignore-optional \
+    && yarn build \
+    && yarn cache clean \
+    && cd ..
+
 # Block for posthog cloud additions 
 COPY requirements.txt /code/cloud_requirements.txt
 RUN cat cloud_requirements.txt >> requirements.txt
