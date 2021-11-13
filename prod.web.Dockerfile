@@ -9,16 +9,14 @@ COPY ./deploy .
 # install javascript and other system level dependencies
 RUN apt-get update \
     && apt-get install -y --no-install-recommends 'curl=7.*' 'git=1:2.*' 'build-essential=12.*' \
-    && apt-get install -y --no-install-recommends 'pkg-config=0.*' 'libxml2-dev=2.*' 'libxmlsec1-dev=1.*' 'libxmlsec1-openssl=1.*' \
+    && apt-get install -y --no-install-recommends 'pkg-config=0.*' 'libxml2-dev=2.*' 'libxmlsec1-dev=1.*' 'libxmlsec1-openssl=1.*' 'musl-dev=1.*' \
+    && ln -s /usr/lib/x86_64-linux-musl/libc.so /lib/libc.musl-x86_64.so.1 \
     && curl -sL https://deb.nodesource.com/setup_14.x | bash - \
     && apt-get install -y --no-install-recommends 'nodejs=14.*' \ 
     && npm install -g yarn@1 \
     && yarn config set network-timeout 300000 \
     && yarn --frozen-lockfile \
     && yarn build \
-    && cd plugins \
-    && yarn --frozen-lockfile --ignore-optional \
-    && cd .. \
     && yarn cache clean \
     && apt-get purge -y curl build-essential \
     && rm -rf node_modules \
