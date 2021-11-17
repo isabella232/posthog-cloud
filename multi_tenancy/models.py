@@ -18,6 +18,7 @@ PLANS = {
     "startup": License.SCALE_FEATURES,
     "standard": License.SCALE_FEATURES,
     "enterprise": License.ENTERPRISE_FEATURES,
+    "enterprise_with_standard_billing": License.ENTERPRISE_FEATURES, # Single user, see https://github.com/PostHog/posthog/pull/7163 for context
 }
 
 
