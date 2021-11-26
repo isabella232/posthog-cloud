@@ -9,16 +9,16 @@ from django.utils import timezone
 from ee.models import License
 from posthog.models import Organization, User
 
-from .stripe import (create_subscription, create_subscription_checkout_session,
-                     create_zero_auth)
+from .stripe import create_subscription, create_subscription_checkout_session, create_zero_auth
 
 PLANS = {
-    "starter": ["organizations_projects"], # DEPRECATED
-    "growth": License.SCALE_FEATURES, # DEPRECATED
+    "starter": ["organizations_projects"],  # DEPRECATED
+    "growth": License.SCALE_FEATURES,  # DEPRECATED
     "startup": License.SCALE_FEATURES,
     "standard": License.SCALE_FEATURES,
+    "scale_community": License.SCALE_FEATURES,  # https://github.com/PostHog/company-internal/issues/498
     "enterprise": License.ENTERPRISE_FEATURES,
-    "enterprise_with_standard_billing": License.ENTERPRISE_FEATURES, # Single user, see https://github.com/PostHog/posthog/pull/7163 for context
+    "enterprise_with_standard_billing": License.ENTERPRISE_FEATURES,  # Single user, see https://github.com/PostHog/posthog/pull/7163 for context
 }
 
 
