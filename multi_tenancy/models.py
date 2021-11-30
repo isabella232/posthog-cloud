@@ -161,14 +161,20 @@ class OrganizationBilling(models.Model):
         """
         Handles logic after a card has been validated.
         """
+        subscription = None
         if self.plan.key == "startup" or self.plan.key == "flat-5":
-            self.billing_period_ends = timezone.now() + datetime.timedelta(days=365)
-            self.should_setup_billing = False
+            a_year_from_now = timezone.now() + datetime.timedelta(days=365)
+            subscription = create_subscription(
+                price_id=self.plan.price_id, customer_id=self.stripe_customer_id, cancel_at=a_year_from_now
+            )
         elif self.plan.is_metered_billing:
             subscription = create_subscription(price_id=self.plan.price_id, customer_id=self.stripe_customer_id)
+
+        if subscription:
             self.stripe_subscription_item_id = subscription["subscription_item_id"]
             self.stripe_subscription_id = subscription["subscription_id"]
             self.should_setup_billing = False
+
         self.save()
         return self
 

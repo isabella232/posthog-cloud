@@ -10,9 +10,7 @@ class TestTeamSignup(CloudAPIBaseTest):
     @classmethod
     def setUpTestData(cls):
         super().setUpTestData()
-        User.objects.create(
-            email="firstuser@posthog.com",
-        )  # to ensure consistency in tests
+        User.objects.create(email="firstuser@posthog.com",)  # to ensure consistency in tests
 
     @patch("messaging.tasks.process_organization_signup_messaging.delay")
     @patch("posthoganalytics.identify")
@@ -82,7 +80,6 @@ class TestTeamSignup(CloudAPIBaseTest):
         for prop, val in key_analytics_props.items():
             self.assertEqual(identify_props[prop], val)
 
-
         # Assert that the user is logged in
         response = self.client.get("/api/users/@me/")
         self.assertEqual(response.status_code, status.HTTP_200_OK)
@@ -92,16 +89,12 @@ class TestTeamSignup(CloudAPIBaseTest):
         self.assertTrue(user.check_password("notsecure"))
 
         # Check that the process_organization_signup_messaging task was fired
-        mock_messaging.assert_called_once_with(
-            user_id=user.id, organization_id=str(organization.id)
-        )
+        mock_messaging.assert_called_once_with(user_id=user.id, organization_id=str(organization.id))
 
     @patch("messaging.tasks.process_organization_signup_messaging.delay")
     @patch("posthoganalytics.identify")
     @patch("posthoganalytics.capture")
-    def test_api_sign_up_existing_email(
-        self, mock_capture, mock_identify, mock_messaging
-    ):
+    def test_api_sign_up_existing_email(self, mock_capture, mock_identify, mock_messaging):
         response = self.client.post(
             "/api/signup/",
             {
@@ -115,8 +108,7 @@ class TestTeamSignup(CloudAPIBaseTest):
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
         response.data.pop("detail")  # Message might be changed in main repo
         self.assertEqual(
-            response.data,
-            {"type": "validation_error", "code": "unique", "attr": "email"},
+            response.data, {"type": "validation_error", "code": "unique", "attr": "email"},
         )
 
     @patch("posthoganalytics.capture")
@@ -129,12 +121,7 @@ class TestTeamSignup(CloudAPIBaseTest):
 
         response = self.client.post(
             "/api/signup/",
-            {
-                "first_name": "John",
-                "email": "hedgehog5@posthog.com",
-                "password": "notsecure",
-                "email_opt_in": False,
-            },
+            {"first_name": "John", "email": "hedgehog5@posthog.com", "password": "notsecure", "email_opt_in": False,},
         )
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
 
@@ -168,18 +155,13 @@ class TestTeamSignup(CloudAPIBaseTest):
         self.assertEqual(response.json()["email"], "hedgehog5@posthog.com")
 
         # Check that the process_organization_signup_messaging task was fired
-        mock_messaging.assert_called_once_with(
-            user_id=user.id, organization_id=str(organization.id)
-        )
+        mock_messaging.assert_called_once_with(user_id=user.id, organization_id=str(organization.id))
 
     @patch("posthoganalytics.capture")
     @patch("messaging.tasks.process_organization_signup_messaging.delay")
     def test_user_can_sign_up_with_a_custom_plan(self, mock_messaging, mock_capture):
         plan = Plan.objects.create(
-            key="startup",
-            default_should_setup_billing=True,
-            price_id="price_12345678",
-            name="Test Plan",
+            key="startup", default_should_setup_billing=True, price_id="price_12345678", name="Test Plan",
         )
 
         response = self.client.post(
@@ -207,8 +189,7 @@ class TestTeamSignup(CloudAPIBaseTest):
 
         # Check that the process_organization_signup_messaging task was fired
         mock_messaging.assert_called_once_with(
-            user_id=user.id,
-            organization_id=str(organization.id),
+            user_id=user.id, organization_id=str(organization.id),
         )
 
         # Check that we send the sign up event to PostHog analytics
@@ -234,12 +215,7 @@ class TestTeamSignup(CloudAPIBaseTest):
 
         response = self.client.post(
             "/api/signup/",
-            {
-                "first_name": "Jane",
-                "email": "hedgehog6@posthog.com",
-                "password": "notsecure",
-                "plan": "NOTVALID",
-            },
+            {"first_name": "Jane", "email": "hedgehog6@posthog.com", "password": "notsecure", "plan": "NOTVALID",},
         )
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
 
@@ -271,28 +247,20 @@ class TestTeamSignup(CloudAPIBaseTest):
 
         # Check that the process_organization_signup_messaging task was fired
         mock_messaging.assert_called_once_with(
-            user_id=user.pk,
-            organization_id=str(organization.id),
+            user_id=user.pk, organization_id=str(organization.id),
         )
 
     @patch("messaging.tasks.process_organization_signup_messaging.delay")
     @patch("posthoganalytics.capture")
     def test_sign_up_multiple_teams_multi_tenancy(
-        self,
-        mock_capture,
-        mock_messaging,
+        self, mock_capture, mock_messaging,
     ):
 
         # Create a user first to make sure additional users can be created
         User.objects.create(email="i_was_first@posthog.com")
 
         response = self.client.post(
-            "/api/signup/",
-            {
-                "first_name": "John",
-                "email": "multi@posthog.com",
-                "password": "eruceston",
-            },
+            "/api/signup/", {"first_name": "John", "email": "multi@posthog.com", "password": "eruceston",},
         )
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
 
@@ -340,6 +308,6 @@ class TestTeamSignup(CloudAPIBaseTest):
 
         # Check that the process_organization_signup_messaging task was fired
         mock_messaging.assert_called_once_with(
-            user_id=user.pk,
-            organization_id=str(user.organization.id),
+            user_id=user.pk, organization_id=str(user.organization.id),
         )
+

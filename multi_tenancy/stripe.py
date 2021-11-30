@@ -89,14 +89,16 @@ def create_zero_auth(email: str, base_url: str, customer_id: str = "") -> Tuple[
     return (session.id, customer_id)
 
 
-def create_subscription(price_id: str = "", customer_id: str = "",) -> Dict[str, str]:
+def create_subscription(
+    price_id: str = "", customer_id: str = "", cancel_at: Optional[datetime.datetime] = None,
+) -> Dict[str, str]:
     """
     Creates a subscription for an existing customer with payment details already set up. Used mainly for metered
     plans.
     """
 
     customer_id = _get_customer_id(
-        customer_id
+        customer_id,
     )  # we don't pass the email because the customer is always created before (on zero auth)
 
     subscription = stripe.Subscription.create(
@@ -104,13 +106,14 @@ def create_subscription(price_id: str = "", customer_id: str = "",) -> Dict[str,
         items=[{"price": price_id}],
         trial_period_days=settings.BILLING_TRIAL_DAYS,
         billing_cycle_anchor=get_billing_cycle_anchor(timezone.now()),
+        cancel_at=cancel_at,
     )
 
     subscription_data = subscription.to_dict()
 
     return {
         "subscription_id": subscription_data["id"],
-        "subscription_item_id": subscription_data["items"]["data"][0]["id"],  # TODO: DEPRECATED
+        "subscription_item_id": subscription_data["items"]["data"][0]["id"],
         "customer_id": customer_id,
     }
 

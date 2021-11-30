@@ -463,23 +463,34 @@ class TestPaymentSucceededWebhooks(StripeWebhookTestMixin):
 
 
 class TestSpecialWebhookHandling(StripeWebhookTestMixin):
+    @patch("multi_tenancy.stripe._get_customer_id")
+    @patch("stripe.Customer.modify")
+    @patch("multi_tenancy.stripe.stripe.Subscription.create")
     @patch("posthoganalytics.capture")
     @patch("multi_tenancy.views.cancel_payment_intent")
     @vcr.use_cassette(cassette_library_dir="multi_tenancy/tests/cassettes", filter_headers=["authorization"])
     def test_billing_period_special_handling_for_startup_plan(
-        self, cancel_payment_intent, mock_capture,
+        self, cancel_payment_intent, mock_capture, mock_subscription_create, set_default_pm, mock_customer_id,
     ):
+
+        mock_customer_id.return_value = "cus_StartupI2MVxJI"
+        mock_session_data = MagicMock()
+        mock_session_data.to_dict.return_value = {
+            "id": "sub_startup_1234554321",
+            "items": {"data": [{"id": "si_1a2b3c4d", "metadata": {"a": "b"}}]},
+        }
+        mock_subscription_create.return_value = mock_session_data
 
         sample_webhook_secret: str = "wh_sec_test_abcdefghijklmnopqrstuvwxyz"
 
         organization, _, user1 = self.create_org_team_user()
         user2 = User.objects.create_user(email="test_user_2@posthog.com", first_name="Test 2", password="12345678")
         user2.join(organization=organization)
-        startup_plan = Plan.objects.create(key="startup", name="Startup", price_id="not_set")
+        startup_plan = Plan.objects.create(key="startup", name="Startup", price_id="price_startup_123456")
         instance: OrganizationBilling = OrganizationBilling.objects.create(
             organization=organization,
             should_setup_billing=True,
-            stripe_customer_id="cus_IuiXChYGDqmHPi",
+            stripe_customer_id="cus_StartupI2MVxJI",
             plan=startup_plan,
         )
 
@@ -513,7 +524,7 @@ class TestSpecialWebhookHandling(StripeWebhookTestMixin):
                     "confirmation_method":"automatic",
                     "created":1600267775,
                     "currency":"usd",
-                    "customer":"cus_IuiXChYGDqmHPi",
+                    "customer":"cus_StartupI2MVxJI",
                     "on_behalf_of":null,
                     "payment_method": "card_1IRjpiEuIatRXSdzMcSSmCU9"
                 }
@@ -527,24 +538,36 @@ class TestSpecialWebhookHandling(StripeWebhookTestMixin):
         signature: str = self.generate_webhook_signature(body, sample_webhook_secret)
         csrf_client = Client(enforce_csrf_checks=True)  # Custom client to ensure CSRF checks pass
 
-        with self.settings(STRIPE_WEBHOOK_SECRET=sample_webhook_secret):
+        with freeze_time("2021-11-11T07:50:50.000000Z"):
+            with self.settings(STRIPE_WEBHOOK_SECRET=sample_webhook_secret):
 
-            response = csrf_client.post(
-                "/billing/stripe_webhook", body, content_type="text/plain", HTTP_STRIPE_SIGNATURE=signature,
-            )
-            self.assertEqual(response.status_code, status.HTTP_200_OK)
+                response = csrf_client.post(
+                    "/billing/stripe_webhook", body, content_type="text/plain", HTTP_STRIPE_SIGNATURE=signature,
+                )
+                self.assertEqual(response.status_code, status.HTTP_200_OK)
 
-        # Check that the period end was updated (1 year from now)
-        instance.refresh_from_db()
-        self.assertTrue(
-            (timezone.now() + datetime.timedelta(days=365) - instance.billing_period_ends).total_seconds(), 2,
+        # Assert that the startup subscription was properly created on Stripe
+        mock_subscription_create.assert_called_once_with(
+            customer="cus_StartupI2MVxJI",
+            items=[{"price": "price_startup_123456"}],
+            trial_period_days=0,
+            billing_cycle_anchor=datetime.datetime(2021, 12, 1, 23, 59, 59, 999999, tzinfo=pytz.UTC,),
+            cancel_at=datetime.datetime(2022, 11, 11, 7, 50, 50, 0, tzinfo=pytz.UTC,),
         )
+
+        instance.refresh_from_db()
+        self.assertEqual(instance.billing_period_ends, None)  # this is not changed
+        self.assertEqual(instance.stripe_subscription_id, "sub_startup_1234554321")
         self.assertEqual(
-            instance.stripe_subscription_item_id, ""
-        )  # this is not updated as there's no Stripe subscription on startup plan
+            instance.stripe_subscription_item_id, "si_1a2b3c4d",
+        )
 
         # Check that the payment is cancelled (i.e. not captured)
         cancel_payment_intent.assert_called_once_with("pi_TxLb1HS1CyhnDR")
+
+        set_default_pm.assert_called_once_with(
+            "cus_StartupI2MVxJI", invoice_settings={"default_payment_method": "card_1IRjpiEuIatRXSdzMcSSmCU9"}
+        )
 
         # Assert that special analytics event is fired; test it's sent for every user in the org too
         self.assertEqual(mock_capture.call_count, 2)
@@ -644,6 +667,7 @@ class TestSpecialWebhookHandling(StripeWebhookTestMixin):
             items=[{"price": "price_zyxwvu"}],
             trial_period_days=30,
             billing_cycle_anchor=datetime.datetime(2021, 1, 1, 23, 59, 59, 999999, tzinfo=pytz.UTC,),
+            cancel_at=None,
         )
 
         # Check that the instance is correctly updated
