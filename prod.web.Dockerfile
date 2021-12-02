@@ -1,5 +1,6 @@
 FROM python:3.8-slim
-ENV PYTHONUNBUFFERED 1
+ENV PYTHONUNBUFFERED=1
+ENV JS_URL='https://d1l1qibt80hm9p.cloudfront.net'
 RUN mkdir /code
 WORKDIR /code
 
