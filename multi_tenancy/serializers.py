@@ -132,7 +132,10 @@ class BillingSerializer(serializers.ModelSerializer):
         If the subscription is metered (usage-based), we return the accrued bill amount (in $) for the
         upcoming not-yet-billed invoice (i.e. usage of the current bill period).
         """
-        if not instance.is_billing_active or not instance.plan.is_metered_billing:
+
+        if not instance.is_billing_active \
+                or not instance.plan.is_metered_billing \
+                or not instance.stripe_subscription_id:
             return None
         return get_current_usage_bill(instance.stripe_subscription_id)
 
