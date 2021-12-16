@@ -10,5 +10,5 @@ curl -L $TARBALL_URL | tar --strip-components=1 -xz -C deploy --
 cp -r multi_tenancy deploy/
 cp -r messaging deploy/
 
-cat multi_tenancy_settings.py >> deploy/posthog/settings.py
+cat multi_tenancy_settings.py > deploy/posthog/settings/cloud.py
 cat requirements.txt >> deploy/requirements.txt

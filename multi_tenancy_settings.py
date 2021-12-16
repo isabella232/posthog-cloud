@@ -1,4 +1,8 @@
-# These settings get copied by bin/pull_main or bin/develop into the end of settings.py of the main PostHog code base.
+# These settings get copied by bin/pull_main or bin/develop into posthog/settings/cloud.py of the main PostHog code base.
+
+import os
+from posthog.settings.utils import get_from_env
+from posthog.settings.web import TEMPLATES, INSTALLED_APPS, MIDDLEWARE
 
 MULTI_TENANCY = os.environ.get("MULTI_TENANCY", True)
 

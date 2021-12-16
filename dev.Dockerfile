@@ -33,7 +33,7 @@ COPY ./multi_tenancy /code/multi_tenancy/
 COPY ./messaging /code/messaging/
 
 COPY multi_tenancy_settings.py /code/cloud_settings.py
-RUN cat /code/cloud_settings.py >> /code/posthog/settings.py
+RUN cat /code/cloud_settings.py > /code/posthog/settings/cloud.py
 
 
 RUN DEBUG=1 DATABASE_URL='postgres:///' REDIS_URL='redis:///' python manage.py collectstatic --noinput
