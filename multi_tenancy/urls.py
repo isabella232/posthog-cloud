@@ -1,6 +1,7 @@
 from typing import List
 
-from django.urls import path
+from django.urls import path, include
+from django.contrib import admin
 from posthog.urls import opt_slash_path
 from posthog.urls import urlpatterns as posthog_urls
 
@@ -19,6 +20,9 @@ from .views import (
 
 # Include `posthog-cloud` routes first
 urlpatterns: List = [
+    # admin
+    path("admin/", include("loginas.urls")),
+    path("admin/", admin.site.urls),
     opt_slash_path(
         "api/signup", MultiTenancyOrgSignupViewset.as_view(),
     ),  # Override to support setting a billing plan on signup
