@@ -9,12 +9,17 @@ from django.utils import timezone
 from ee.models import License
 from posthog.models import Organization, User
 
-from .stripe import create_subscription, create_subscription_checkout_session, create_zero_auth
+from .stripe import (
+    create_subscription,
+    create_subscription_checkout_session,
+    create_zero_auth,
+)
 
 PLANS = {
     "starter": ["organizations_projects"],  # DEPRECATED
     "growth": License.SCALE_FEATURES,  # DEPRECATED
     "startup": License.SCALE_FEATURES,
+    "flat-5": License.SCALE_FEATURES,
     "standard": License.SCALE_FEATURES,
     "scale_community": License.SCALE_FEATURES,  # https://github.com/PostHog/company-internal/issues/498
     "enterprise": License.ENTERPRISE_FEATURES,
@@ -38,7 +43,9 @@ class Plan(models.Model):
     custom_setup_billing_message: models.TextField = models.TextField(
         blank=True
     )  # displays a custom message (in the UI) when prompting a user to confirm their billing details (e.g. explain the zero-auth charge in startup plan)
-    price_id: models.CharField = models.CharField(max_length=128)  # Stripe ID of the relevant price definition
+    price_id: models.CharField = models.CharField(
+        max_length=128
+    )  # Stripe ID of the relevant price definition
     event_allowance: models.IntegerField = models.IntegerField(
         default=None, null=True, blank=True,
     )  # number of monthly events that this plan allows; use null for unlimited events and metered pricing
@@ -70,7 +77,10 @@ class OrganizationBilling(models.Model):
     """An extension to Organization for handling PostHog Cloud billing."""
 
     organization: models.OneToOneField = models.OneToOneField(
-        Organization, on_delete=models.CASCADE, primary_key=True, related_name="billing",
+        Organization,
+        on_delete=models.CASCADE,
+        primary_key=True,
+        related_name="billing",
     )
     stripe_customer_id: models.CharField = models.CharField(max_length=128, blank=True)
     stripe_checkout_session: models.CharField = models.CharField(
@@ -95,7 +105,9 @@ class OrganizationBilling(models.Model):
         " Must be set manually if the plan is manually assigned.",
     )
     billing_period_ends: models.DateTimeField = models.DateTimeField(
-        null=True, blank=True, help_text="Final date until when this plan will be active."
+        null=True,
+        blank=True,
+        help_text="Final date until when this plan will be active.",
     )
     plan: models.ForeignKey = models.ForeignKey(
         Plan, on_delete=models.PROTECT, null=True, default=None, blank=True,
@@ -141,7 +153,9 @@ class OrganizationBilling(models.Model):
 
         return []
 
-    def create_checkout_session(self, user: User, base_url: str,) -> Tuple[Optional[str], Optional[str]]:
+    def create_checkout_session(
+        self, user: User, base_url: str,
+    ) -> Tuple[Optional[str], Optional[str]]:
         """
         Creates a checkout session for the specified plan.
         Uses any custom logic specific to the plan if configured.
@@ -151,10 +165,17 @@ class OrganizationBilling(models.Model):
         # agreement is not yet created. This is coincidentally the same behavior for the startup plan.
         if self.plan.is_metered_billing or self.plan.key == "startup":
             # For the startup plan we only do a card validation (no subscription)
-            return create_zero_auth(email=user.email, base_url=base_url, customer_id=self.stripe_customer_id,)
+            return create_zero_auth(
+                email=user.email,
+                base_url=base_url,
+                customer_id=self.stripe_customer_id,
+            )
 
         return create_subscription_checkout_session(
-            email=user.email, base_url=base_url, price_id=self.plan.price_id, customer_id=self.stripe_customer_id,
+            email=user.email,
+            base_url=base_url,
+            price_id=self.plan.price_id,
+            customer_id=self.stripe_customer_id,
         )
 
     def handle_post_card_validation(self) -> "OrganizationBilling":
@@ -165,10 +186,14 @@ class OrganizationBilling(models.Model):
         if self.plan.key == "startup" or self.plan.key == "flat-5":
             a_year_from_now = timezone.now() + datetime.timedelta(days=365)
             subscription = create_subscription(
-                price_id=self.plan.price_id, customer_id=self.stripe_customer_id, cancel_at=a_year_from_now
+                price_id=self.plan.price_id,
+                customer_id=self.stripe_customer_id,
+                cancel_at=a_year_from_now,
             )
         elif self.plan.is_metered_billing:
-            subscription = create_subscription(price_id=self.plan.price_id, customer_id=self.stripe_customer_id)
+            subscription = create_subscription(
+                price_id=self.plan.price_id, customer_id=self.stripe_customer_id
+            )
 
         if subscription:
             self.stripe_subscription_item_id = subscription["subscription_item_id"]
@@ -180,7 +205,9 @@ class OrganizationBilling(models.Model):
 
 
 @receiver(post_save, sender=OrganizationBilling)
-def organization_billing_saved(sender, instance: OrganizationBilling, created, raw, using, **kwargs):
+def organization_billing_saved(
+    sender, instance: OrganizationBilling, created, raw, using, **kwargs
+):
     organization = instance.organization
     organization.update_available_features()
     organization.save()
