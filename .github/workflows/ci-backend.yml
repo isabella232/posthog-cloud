@@ -27,7 +27,7 @@ jobs:
         run: bin/pull_main
 
       - name: Start stack with Docker Compose
-        run: docker-compose -f deploy/ee/docker-compose.ch.yml up -d db clickhouse zookeeper kafka
+        run: docker-compose -f deploy/docker-compose.yml up -d db clickhouse zookeeper kafka
 
       - name: Set up Python 3.8
         uses: actions/setup-python@v2
@@ -36,8 +36,8 @@ jobs:
 
       - name: Install SAML (python3-saml) dependencies
         run: |
-            sudo apt-get update
-            sudo apt-get install libxml2-dev libxmlsec1-dev libxmlsec1-openssl
+          sudo apt-get update
+          sudo apt-get install libxml2-dev libxmlsec1-dev libxmlsec1-openssl
 
       - uses: syphar/restore-virtualenv@v1
         id: cache-backend-tests
@@ -86,7 +86,7 @@ jobs:
           cp deploy/ee/conftest.py deploy/multi_tenancy/conftest.py
 
       - name: Start stack with Docker Compose
-        run: docker-compose -f deploy/ee/docker-compose.ch.yml up -d db clickhouse
+        run: docker-compose -f deploy/docker-compose.yml up -d db clickhouse
 
       - name: Set up Python 3.8
         uses: actions/setup-python@v2
@@ -95,8 +95,8 @@ jobs:
 
       - name: Install SAML (python3-saml) dependencies
         run: |
-            sudo apt-get update
-            sudo apt-get install libxml2-dev libxmlsec1-dev libxmlsec1-openssl
+          sudo apt-get update
+          sudo apt-get install libxml2-dev libxmlsec1-dev libxmlsec1-openssl
 
       - uses: syphar/restore-virtualenv@v1
         id: cache-backend-tests
