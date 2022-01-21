@@ -5,7 +5,6 @@ from django.conf import settings
 from django.core.mail import EmailMultiAlternatives
 
 from .models import UserMessagingRecord
-from constance import config
 
 
 class Mail:
@@ -20,11 +19,11 @@ class Mail:
         if content:
             utmified_url += f"&utm_content={content}"
         return utmified_url
-
+        
     @classmethod
     def send_no_event_ingestion_follow_up(cls, email_address: str, name: str) -> None:
         campaign: str = UserMessagingRecord.NO_EVENT_INGESTION_FOLLOW_UP
-
+        
         content: str = f"""
         Hey,
 
@@ -77,7 +76,7 @@ class Mail:
             from_email=cls.FROM_ADDRESS,
             to=[f"{pattern.sub('', name)} <{email_address}>"],
             headers=cls.EMAIL_HEADERS,
-            reply_to=config.EMAIL_REPLY_TO,
+            reply_to=settings.EMAIL_REPLY_TO,
         )
         email_message.attach_alternative(html_content, "text/html")
         email_message.send()
