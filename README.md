@@ -14,33 +14,31 @@ The main repo is pulled using the script into the `/deploy` folder. The contents
 
 ## Developing locally
 
-> Please note running locally now **requires Clickhouse. Tests will NOT PASS if Clickhouse is not available.**
-
 Below you'll find the recommended steps to run locally. While running everything on Docker is possible (see [developing locally](https://posthog.com/docs/developing-locally) for the main repo), this would require more setup.
 
 1. Set up a virtual environment (sample code below).
    ```bash
    python3 -m venv env
    ```
-1. Run `bin/develop`. If you need to develop relative to a main repo branch other than `master`, pass branch name as command line argument, like so:
+2. Run `bin/develop`. If you need to develop relative to a main repo branch other than `master`, pass branch name as command line argument, like so:
    ```
    bin/develop some-branch
    ```
-1. Load the sample environment variables by running,
+3. Load the sample environment variables by running,
    ```bash
    source .env.template
    ```
-1. Run Clickhouse (and dependencies) using Docker,
+4. Run Clickhouse (and dependencies) using Docker,
    ```bash
-   docker-compose -f deploy/ee/docker-compose.ch.yml up clickhouse kafka zookeeper
+   docker-compose -f deploy/docker-compose.dev.yml up clickhouse kafka zookeeper db
    ```
-1. You can run the server by running,
+5. You can run the server by running,
    ```bash
    cd deploy
-   DEBUG=1 python manage.py migrate
+   python manage.py migrate
    ./bin/start
    ```
-1. **Alternatively**, you can just run the local tests by doing
+6. **Alternatively**, you can just run the local tests by doing
    ```bash
    python manage.py test multi_tenancy messaging --exclude-tag=skip_on_multitenancy
    ```
@@ -74,4 +72,4 @@ Some features particular to this repo are documented below.
 
 Join us on [Slack][slack].
 
-[slack]: https://posthog.com/slack?utm_medium=readme&utm_campaign=posthog-production&utm_source=github.com
+[slack]: https://posthog.com/slack?utm_medium=readme&utm_campaign=posthog-cloud&utm_source=github.com
