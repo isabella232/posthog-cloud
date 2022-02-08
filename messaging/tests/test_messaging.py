@@ -1,3 +1,4 @@
+import uuid
 from django.core import mail
 from django.db.utils import IntegrityError
 from messaging.models import UserMessagingRecord
@@ -14,7 +15,8 @@ class TestMessaging(CloudBaseTest):
         with self.assertRaises(IntegrityError) as e:
             UserMessagingRecord.objects.create(user=user, campaign="test_campaign")
         self.assertIn(
-            'duplicate key value violates unique constraint "messaging_usermessagingrecord', str(e.exception),
+            'duplicate key value violates unique constraint "messaging_usermessagingrecord',
+            str(e.exception),
         )
 
     def test_check_and_send_no_event_ingestion_follow_up(self):
@@ -25,7 +27,9 @@ class TestMessaging(CloudBaseTest):
             check_and_send_no_event_ingestion_follow_up(self.user.pk)
 
         self.assertEqual(len(mail.outbox), 1)
-        self.assertEqual(mail.outbox[0].subject, "Product insights with PostHog are waiting for you")
+        self.assertEqual(
+            mail.outbox[0].subject, "Product insights with PostHog are waiting for you"
+        )
         self.assertEqual(mail.outbox[0].from_email, "PostHog Team <hey@posthog.com>")
         self.assertEqual(mail.outbox[0].to, ["John Test <user1@posthog.com>"])
         self.assertIn(
@@ -41,7 +45,10 @@ class TestMessaging(CloudBaseTest):
     def test_does_not_send_event_ingestion_email_if_any_team_has_ingested_events(self):
         # Object setup
         organization, team, user = User.objects.bootstrap(
-            organization_name="Test III", email="test3@posthog.com", password=None, first_name="John Test III",
+            organization_name="Test III",
+            email="test3@posthog.com",
+            password=None,
+            first_name="John Test III",
         )
         Team.objects.create(organization=organization)
         Event.objects.create(team=team)
@@ -61,15 +68,21 @@ class TestMessaging(CloudBaseTest):
         check_and_send_no_event_ingestion_follow_up(user.pk)
         self.assertEqual(len(mail.outbox), 0)
 
-    def test_does_not_send_event_ingestion_email_if_user_has_received_email_before(self,):
-        user: User = User.objects.create(email="valid@posthog.com")
+    def test_does_not_send_event_ingestion_email_if_user_has_received_email_before(
+        self,
+    ):
+        user = User.objects.create(
+            email="valid@posthog.com", distinct_id=str(uuid.uuid4())
+        )
 
         for i in range(0, 3):
             check_and_send_no_event_ingestion_follow_up(user.pk)
         self.assertEqual(len(mail.outbox), 1)  # just one email was sent
 
-    def test_event_ingestion_email_is_sent_again_if_previous_attempt_failed(self,):
-        user: User = User.objects.create(email="valid@posthog.com")
+    def test_event_ingestion_email_is_sent_again_if_previous_attempt_failed(self):
+        user = User.objects.create(
+            email="valid@posthog.com", distinct_id=str(uuid.uuid4())
+        )
         UserMessagingRecord.objects.create(
             user=user,
             campaign=UserMessagingRecord.NO_EVENT_INGESTION_FOLLOW_UP,  # sent_at = None (i.e. has not been sent)

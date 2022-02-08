@@ -617,7 +617,7 @@ class TestAPIOrganizationBilling(CloudAPIBaseTest):
         `/api/users/@me/` request is handled gracefully.
         """
 
-        user = User.objects.create(email="alone@posthog.com")
+        user = User.objects.create(email="alone@posthog.com", distinct_id=str(uuid.uuid4()))
         self.client.force_login(user)
         response = self.client.get("/api/users/@me")
         self.assertEqual(response.status_code, status.HTTP_200_OK)
