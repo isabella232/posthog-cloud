@@ -33,8 +33,15 @@ from multi_tenancy.stripe import (
     parse_webhook,
     set_default_payment_method_for_customer,
 )
-from multi_tenancy.tasks import report_card_validated, update_subscription_billing_period
-from multi_tenancy.utils import get_error_status, is_cors_origin_ok, transform_response_add_cors
+from multi_tenancy.tasks import (
+    report_card_validated,
+    update_subscription_billing_period,
+)
+from multi_tenancy.utils import (
+    get_error_status,
+    is_cors_origin_ok,
+    transform_response_add_cors,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -61,7 +68,9 @@ class BillingViewset(mixins.RetrieveModelMixin, GenericViewSet):
     serializer_class = BillingSerializer
 
     def get_object(self) -> OrganizationBilling:
-        instance, _ = OrganizationBilling.objects.get_or_create(organization=self.request.user.organization)
+        instance, _ = OrganizationBilling.objects.get_or_create(
+            organization=self.request.user.organization
+        )
         return instance
 
 
@@ -71,7 +80,9 @@ class BillingSubscribeViewset(mixins.CreateModelMixin, GenericViewSet):
 
 def stripe_checkout_view(request: HttpRequest):
     return render_template(
-        "stripe-checkout.html", request, {"STRIPE_PUBLISHABLE_KEY": settings.STRIPE_PUBLISHABLE_KEY},
+        "stripe-checkout.html",
+        request,
+        {"STRIPE_PUBLISHABLE_KEY": settings.STRIPE_PUBLISHABLE_KEY},
     )
 
 
@@ -81,14 +92,18 @@ def stripe_billing_portal(request: HttpRequest):
     if not request.user.is_authenticated:
         return HttpResponse("Unauthorized", status=status.HTTP_401_UNAUTHORIZED)
 
-    instance, _ = OrganizationBilling.objects.get_or_create(organization=request.user.organization,)
+    instance, _ = OrganizationBilling.objects.get_or_create(
+        organization=request.user.organization,
+    )
 
     if instance.stripe_customer_id:
         url = customer_portal_url(instance.stripe_customer_id)
 
     # Report event manually because this page doesn't load any HTML (i.e. there's no autocapture available).
     posthoganalytics.capture(
-        request.user.distinct_id, "visited billing customer portal", {"portal_available": bool(url)},
+        request.user.distinct_id,
+        "visited billing customer portal",
+        {"portal_available": bool(url)},
     )
 
     return redirect(url or "/")
@@ -109,14 +124,32 @@ def stripe_webhook(request: HttpRequest) -> JsonResponse:
         return error_response
 
     try:
+
         customer_id = event["data"]["object"]["customer"]
 
         try:
             instance = OrganizationBilling.objects.get(stripe_customer_id=customer_id)
         except OrganizationBilling.DoesNotExist:
-            capture_message(
-                f"Received invoice.payment_succeeded for {customer_id} but customer is not in the database.",
-            )
+
+            # Check this is a Cloud customer first
+            prices = list(Plan.objects.all().values_list("price_id", flat=True))
+            if event["type"] == "invoice.payment_succeeded":
+                invoice_lines = event["data"]["object"]["lines"]["data"]
+                for line in invoice_lines:
+                    if line["price"]["id"] in prices:
+                        capture_message(
+                            "Received invoice.payment_succeeded on Cloud product"
+                            f" for {customer_id}, but customer is not in the database.",
+                        )
+                        return error_response  # We return an error response so Stripe retries this
+            elif event["type"] == "payment_intent.amount_capturable_updated":
+                # TODO obtain price_id to compare
+                pass
+            else:
+                capture_message(
+                    f"Received {event['type']} for {customer_id}, but customer is not in the database.",
+                )
+
             return response
 
         if event["type"] == "invoice.payment_succeeded":
@@ -137,7 +170,9 @@ def stripe_webhook(request: HttpRequest) -> JsonResponse:
             instance.should_setup_billing = False
             instance.save()
 
-            update_subscription_billing_period.delay(organization_id=instance.organization.id)
+            update_subscription_billing_period.delay(
+                organization_id=instance.organization.id
+            )
 
         # Special handling for plans that only do card validation (e.g. startup or metered-billing plans)
         elif event["type"] == "payment_intent.amount_capturable_updated":
@@ -151,7 +186,9 @@ def stripe_webhook(request: HttpRequest) -> JsonResponse:
 
             # Attempt to set the newly added card as default
             try:
-                set_default_payment_method_for_customer(customer_id, event["data"]["object"]["payment_method"])
+                set_default_payment_method_for_customer(
+                    customer_id, event["data"]["object"]["payment_method"]
+                )
             except stripe.error.StripeError as e:
                 capture_exception(e)
 
