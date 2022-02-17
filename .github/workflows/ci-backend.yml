@@ -27,7 +27,7 @@ jobs:
         run: bin/pull_main
 
       - name: Start stack with Docker Compose
-        run: docker-compose -f deploy/docker-compose.dev.yml up -d db clickhouse zookeeper kafka
+        run: docker-compose -f deploy/docker-compose.dev.yml up -d db clickhouse zookeeper kafka redis
 
       - name: Set up Python 3.8
         uses: actions/setup-python@v2
@@ -86,7 +86,7 @@ jobs:
           cp deploy/ee/conftest.py deploy/multi_tenancy/conftest.py
 
       - name: Start stack with Docker Compose
-        run: docker-compose -f deploy/docker-compose.dev.yml up -d db clickhouse
+        run: docker-compose -f deploy/docker-compose.dev.yml up -d db clickhouse redis
 
       - name: Set up Python 3.8
         uses: actions/setup-python@v2
