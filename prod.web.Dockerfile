@@ -20,7 +20,7 @@ RUN apt-get update \
     && yarn --frozen-lockfile \
     && yarn build \
     && yarn cache clean \
-    && apt-get purge -y curl build-essential \
+    && apt-get purge -y build-essential \
     && rm -rf node_modules \
     && rm -rf /var/lib/apt/lists/*
 
