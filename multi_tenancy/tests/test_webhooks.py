@@ -1002,3 +1002,158 @@ class TestSpecialWebhookHandling(StripeWebhookTestMixin):
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         capture_message.assert_not_called()
+
+    @patch("multi_tenancy.stripe.stripe.Subscription.create")
+    def test_transition_users_from_startup_plan_to_standard_plan(
+        self, mock_subscription_create
+    ):
+
+        mock_session_data = MagicMock()
+        mock_session_data.to_dict.return_value = {
+            "id": "sub_standard_1234554321",
+            "items": {"data": [{"id": "si_1a2b3c4d", "metadata": {"a": "b"}}]},
+        }
+        mock_subscription_create.return_value = mock_session_data
+
+        sample_webhook_secret: str = "wh_sec_test_abcdefghijklmnopqrstuvwxyz"
+
+        organization, _, _ = self.create_org_team_user()
+        startup_plan = Plan.objects.create(
+            key="startup",
+            name="Startup",
+            price_id="price_startup_123456",
+            is_metered_billing=True,
+        )
+        standard_plan = Plan.objects.create(
+            key="standard",
+            name="Standard",
+            price_id="price_standard_123456",
+            is_metered_billing=True,
+        )
+        instance: OrganizationBilling = OrganizationBilling.objects.create(
+            organization=organization,
+            should_setup_billing=True,
+            stripe_customer_id="cus_StartupI2MVxJI",
+            plan=startup_plan,
+        )
+
+        # Note that the sample request here does not contain the entire body
+        body = """
+        {
+            "id":"evt_h3ETxFuICyJnLbC1H2St7FQu",
+            "object":"event",
+            "created":1594124897,
+            "data":{
+                "object":{
+                    "id":"sub_J2i9v9VdhWbjju",
+                    "customer": "cus_StartupI2MVxJI",
+                    "object":"subscription",
+                    "status":"canceled",
+                    "cancel_at": 1614708845,
+                    "cancel_at_period_end": false,
+                    "canceled_at": 1614708845
+                }
+            },
+            "livemode":false,
+            "pending_webhooks":1,
+            "type":"customer.subscription.deleted"
+        }
+        """
+
+        signature: str = self.generate_webhook_signature(body, sample_webhook_secret)
+        csrf_client = Client(
+            enforce_csrf_checks=True
+        )  # Custom client to ensure CSRF checks pass
+
+        with freeze_time("2021-10-11T07:50:50.000000Z"):
+            with self.settings(STRIPE_WEBHOOK_SECRET=sample_webhook_secret):
+
+                response = csrf_client.post(
+                    "/billing/stripe_webhook",
+                    body,
+                    content_type="text/plain",
+                    HTTP_STRIPE_SIGNATURE=signature,
+                )
+                self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+        # Assert that the startup subscription was properly created on Stripe
+        mock_subscription_create.assert_called_once_with(
+            customer="cus_StartupI2MVxJI",
+            items=[{"price": "price_standard_123456"}],
+            trial_period_days=0,
+            billing_cycle_anchor=datetime.datetime(
+                2021, 11, 1, 23, 59, 59, 999999, tzinfo=pytz.UTC,
+            ),
+            cancel_at=None,
+        )
+
+        instance.refresh_from_db()
+        self.assertEqual(instance.billing_period_ends, None)  # this is not changed
+        self.assertEqual(
+            instance.stripe_subscription_id, "sub_standard_1234554321",
+        )
+        self.assertEqual(instance.plan, standard_plan)
+
+    @patch("multi_tenancy.stripe.stripe.Subscription.create")
+    def test_dont_create_standard_plan_subscription_when_manually_cancelling_startup_plan(
+        self, mock_subscription_create
+    ):
+
+        sample_webhook_secret: str = "wh_sec_test_abcdefghijklmnopqrstuvwxyz"
+
+        organization, _, _ = self.create_org_team_user()
+        startup_plan = Plan.objects.create(
+            key="startup", name="Startup", price_id="price_startup_123456"
+        )
+        instance: OrganizationBilling = OrganizationBilling.objects.create(
+            organization=organization,
+            should_setup_billing=True,
+            stripe_customer_id="cus_StartupI2MVxJI",
+            plan=startup_plan,
+        )
+
+        # Note that the sample request here does not contain the entire body
+        # Note "cancel_at": null means it wasn't an scheduled cancellation
+        body = """
+        {
+            "id":"evt_h3ETxFuICyJnLbC1H2St7FQu",
+            "object":"event",
+            "created":1594124897,
+            "data":{
+                "object":{
+                    "id":"sub_J2i9v9VdhWbjju",
+                    "customer": "cus_StartupI2MVxJI",
+                    "object":"subscription",
+                    "status":"canceled",
+                    "cancel_at": null,
+                    "cancel_at_period_end": false,
+                    "canceled_at": 1614708845
+                }
+            },
+            "livemode":false,
+            "pending_webhooks":1,
+            "type":"customer.subscription.deleted"
+        }
+        """
+
+        signature: str = self.generate_webhook_signature(body, sample_webhook_secret)
+        csrf_client = Client(
+            enforce_csrf_checks=True
+        )  # Custom client to ensure CSRF checks pass
+
+        with self.settings(STRIPE_WEBHOOK_SECRET=sample_webhook_secret):
+
+            response = csrf_client.post(
+                "/billing/stripe_webhook",
+                body,
+                content_type="text/plain",
+                HTTP_STRIPE_SIGNATURE=signature,
+            )
+            self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+        mock_subscription_create.assert_not_called()
+
+        instance.refresh_from_db()
+        self.assertEqual(instance.billing_period_ends, None)  # this is not changed
+        self.assertEqual(instance.stripe_subscription_id, "")
+        self.assertEqual(instance.plan, startup_plan)

@@ -1,9 +1,12 @@
+import datetime
 import json
 import logging
 from distutils.util import strtobool
 from typing import Dict, Optional
 
 import posthoganalytics
+import pytz
+import stripe
 from django.conf import settings
 from django.http import HttpRequest, HttpResponse, JsonResponse
 from django.shortcuts import redirect
@@ -18,7 +21,6 @@ from rest_framework import mixins, status
 from rest_framework.viewsets import GenericViewSet, ModelViewSet
 from sentry_sdk import capture_exception, capture_message
 
-import stripe
 from multi_tenancy.hubspot_api import create_contact, update_contact
 from multi_tenancy.models import OrganizationBilling, Plan
 from multi_tenancy.serializers import (
@@ -133,22 +135,21 @@ def stripe_webhook(request: HttpRequest) -> JsonResponse:
 
             # Check this is a Cloud customer first
             prices = list(Plan.objects.all().values_list("price_id", flat=True))
+
+            invoice_lines = []
+
             if event["type"] == "invoice.payment_succeeded":
                 invoice_lines = event["data"]["object"]["lines"]["data"]
-                for line in invoice_lines:
-                    if line["price"]["id"] in prices:
-                        capture_message(
-                            "Received invoice.payment_succeeded on Cloud product"
-                            f" for {customer_id}, but customer is not in the database.",
-                        )
-                        return error_response  # We return an error response so Stripe retries this
-            elif event["type"] == "payment_intent.amount_capturable_updated":
-                # TODO obtain price_id to compare
-                pass
-            else:
-                capture_message(
-                    f"Received {event['type']} for {customer_id}, but customer is not in the database.",
-                )
+            elif event["type"] == "customer.subscription.deleted":
+                invoice_lines = event["data"]["object"]["items"]["data"]
+
+            for line in invoice_lines:
+                if line["price"]["id"] in prices:
+                    capture_message(
+                        f"Received {event['type']} on Cloud product"
+                        f" for {customer_id}, but customer is not in the database.",
+                    )
+                    return error_response  # We return an error response so Stripe retries this
 
             return response
 
@@ -193,6 +194,18 @@ def stripe_webhook(request: HttpRequest) -> JsonResponse:
                 capture_exception(e)
 
             report_card_validated(organization_id=instance.organization.id)
+
+        elif event["type"] == "customer.subscription.deleted":
+            if instance.plan.key == "startup" and event["data"]["object"]["cancel_at"]:
+                if (
+                    event["data"]["object"]["cancel_at"]
+                    == event["data"]["object"]["canceled_at"]
+                ):
+                    # Startup plan ended for user based on a schedule, transition the organization to the standard plan.
+                    # EDEGE CASE RISK: we manually schedule a plan cancellation for a startup plan which would result in a new
+                    # subscriptionb eing created anyways.
+                    instance.plan = Plan.objects.get(key="standard")
+                    instance.handle_post_card_validation()
 
     except KeyError:
         # Malformed request

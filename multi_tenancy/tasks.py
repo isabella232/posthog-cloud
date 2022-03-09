@@ -12,29 +12,34 @@ from sentry_sdk import capture_message
 from multi_tenancy.stripe import get_subscription, report_subscription_item_usage
 from multi_tenancy.utils import get_event_usage_for_timerange
 
-from .models import OrganizationBilling
+from .models import OrganizationBilling, Plan
 
 
-def compute_daily_usage_for_organizations(for_date: Optional[datetime.datetime] = None,) -> None:
+def compute_daily_usage_for_organizations(
+    for_date: Optional[datetime.datetime] = None,
+) -> None:
     """
     Creates a separate async task to calculate the daily usage for each organization the day before.
     """
 
-    for instance in OrganizationBilling.objects.filter(plan__is_metered_billing=True).exclude(
-        stripe_subscription_id=""
-    ):
+    for instance in OrganizationBilling.objects.filter(
+        plan__is_metered_billing=True
+    ).exclude(stripe_subscription_id=""):
         _compute_daily_usage_for_organization.delay(
             organization_billing_pk=str(instance.pk), for_date=for_date,
         )
 
 
 @app.task(bind=True, ignore_result=True, max_retries=3)
-def _compute_daily_usage_for_organization(self, organization_billing_pk: str, for_date: Optional[str]) -> None:
+def _compute_daily_usage_for_organization(
+    self, organization_billing_pk: str, for_date: Optional[str]
+) -> None:
 
     target_date = (
         dateutil.parser.parse(for_date)
         if for_date
-        else timezone.now() - datetime.timedelta(days=1)  # by default we do the day before
+        else timezone.now()
+        - datetime.timedelta(days=1)  # by default we do the day before
     )
 
     instance = OrganizationBilling.objects.get(pk=organization_billing_pk)
@@ -49,14 +54,21 @@ def _compute_daily_usage_for_organization(self, organization_billing_pk: str, fo
         raise self.retry()
 
     report_monthly_usage.delay(
-        subscription_id=instance.stripe_subscription_id, billed_usage=event_usage, for_date=start_time,
+        subscription_id=instance.stripe_subscription_id,
+        billed_usage=event_usage,
+        for_date=start_time,
     )
 
 
 @app.task(bind=True, ignore_result=True, max_retries=3)
-def report_monthly_usage(self, subscription_id: str, billed_usage: int, for_date: str) -> None:
+def report_monthly_usage(
+    self, subscription_id: str, billed_usage: int, for_date: str
+) -> None:
 
-    success = report_subscription_item_usage(subscription_id=subscription_id, billed_usage=billed_usage, timestamp=dateutil.parser.parse(for_date),
+    success = report_subscription_item_usage(
+        subscription_id=subscription_id,
+        billed_usage=billed_usage,
+        timestamp=dateutil.parser.parse(for_date),
     )
 
     if not success:
@@ -108,7 +120,9 @@ def update_subscription_billing_period(self, organization_id: str) -> None:
     )  # first time (or reactivation) of billing agreement (i.e. not continuing use)
 
     if not organization.billing.stripe_subscription_id:
-        raise ValueError("Invalid update_subscription_billing_period received for billing without a subscription ID.")
+        raise ValueError(
+            "Invalid update_subscription_billing_period received for billing without a subscription ID."
+        )
 
     subscription = get_subscription(organization.billing.stripe_subscription_id)
 
@@ -127,3 +141,28 @@ def update_subscription_billing_period(self, organization_id: str) -> None:
     report_invoice_payment_succeeded.delay(
         organization_id=organization.id, initial=initial_billing,
     )
+
+
+def transition_startup_users() -> None:
+    tomorrow = timezone.now().replace(
+        hour=23, minute=59, second=59
+    ) + datetime.timedelta(days=1)
+    standard_plan = Plan.objects.get(key="standard")
+
+    # Transition legacy startup plans. Previously for startup plans we would create a billing record with an expiration a year from now,
+    # and not create any subscription record on Stripe.
+    orgs_to_transition = OrganizationBilling.objects.filter(
+        plan__key="startup",
+        billing_period_ends__lte=tomorrow,
+        stripe_subscription_id=None,  # Newer customers on startup plan will have a subscription ID set
+    )
+
+    for instance in orgs_to_transition:
+        if not instance.stripe_customer_id:
+            capture_message(
+                f"Cannot transition organization from startup plan because no Stripe record was found. ID: {instance.id}"
+            )
+            continue
+
+        instance.plan = standard_plan
+        instance.handle_post_card_validation()
