@@ -1,11 +1,11 @@
 import datetime
+from django.utils import timezone
 import json
 import logging
 from distutils.util import strtobool
 from typing import Dict, Optional
 
 import posthoganalytics
-import pytz
 import stripe
 from django.conf import settings
 from django.http import HttpRequest, HttpResponse, JsonResponse
@@ -13,8 +13,6 @@ from django.shortcuts import redirect
 from django.template.exceptions import TemplateDoesNotExist
 from django.template.loader import get_template
 from django.views.decorators.csrf import csrf_exempt
-from hubspot.crm.contacts import SimplePublicObject
-from hubspot.crm.contacts.exceptions import ApiException
 from posthog.api.signup import SignupViewset
 from posthog.urls import render_template
 from rest_framework import mixins, status
@@ -202,10 +200,18 @@ def stripe_webhook(request: HttpRequest) -> JsonResponse:
                     == event["data"]["object"]["canceled_at"]
                 ):
                     # Startup plan ended for user based on a schedule, transition the organization to the standard plan.
-                    # EDEGE CASE RISK: we manually schedule a plan cancellation for a startup plan which would result in a new
-                    # subscriptionb eing created anyways.
+                    # EDEGE CASE RISK: we manually schedule a plan cancellation (e.g. user required) for a startup
+                    # plan which would result in a new subscription being created anyways.
                     instance.plan = Plan.objects.get(key="standard")
                     instance.handle_post_card_validation()
+            else:
+                instance.register_cancellation(
+                    timezone.make_aware(
+                        datetime.datetime.fromtimestamp(
+                            event["data"]["object"]["canceled_at"]
+                        )
+                    )
+                )
 
     except KeyError:
         # Malformed request

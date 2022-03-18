@@ -1154,6 +1154,79 @@ class TestSpecialWebhookHandling(StripeWebhookTestMixin):
         mock_subscription_create.assert_not_called()
 
         instance.refresh_from_db()
-        self.assertEqual(instance.billing_period_ends, None)  # this is not changed
+        self.assertEqual(
+            instance.billing_period_ends,
+            datetime.datetime(2021, 3, 2, 18, 14, 5, 0, tzinfo=pytz.UTC),
+        )  # ends at the moment the subscription actually ended
         self.assertEqual(instance.stripe_subscription_id, "")
-        self.assertEqual(instance.plan, startup_plan)
+        self.assertEqual(instance.plan, None)  # plan is removed
+
+    def test_properly_record_when_subscription_is_cancelled(self):
+
+        sample_webhook_secret: str = "wh_sec_test_abcdefghijklmnopqrstuvwxyz"
+
+        organization, _, _ = self.create_org_team_user()
+        standard_plan = Plan.objects.create(
+            key="standard",
+            name="Standard",
+            price_id="price_standard_123456",
+            is_metered_billing=True,
+        )
+        instance: OrganizationBilling = OrganizationBilling.objects.create(
+            organization=organization,
+            should_setup_billing=True,
+            stripe_customer_id="cus_StandardI2MVxJI",
+            plan=standard_plan,
+        )
+
+        # Note that the sample request here does not contain the entire body
+        body = """
+        {
+            "id":"evt_h3ETxFuICyJnLbC1H2St7FQu",
+            "object":"event",
+            "created":1594124897,
+            "data":{
+                "object":{
+                    "id":"sub_J2i9v9VdhWbjju",
+                    "customer": "cus_StandardI2MVxJI",
+                    "object":"subscription",
+                    "status":"canceled",
+                    "cancel_at": null,
+                    "cancel_at_period_end": false,
+                    "canceled_at": 1614708845
+                }
+            },
+            "livemode":false,
+            "pending_webhooks":1,
+            "type":"customer.subscription.deleted"
+        }
+        """
+
+        signature: str = self.generate_webhook_signature(body, sample_webhook_secret)
+        csrf_client = Client(
+            enforce_csrf_checks=True
+        )  # Custom client to ensure CSRF checks pass
+
+        with freeze_time("2021-10-11T07:50:50.000000Z"):
+            with self.settings(STRIPE_WEBHOOK_SECRET=sample_webhook_secret):
+
+                response = csrf_client.post(
+                    "/billing/stripe_webhook",
+                    body,
+                    content_type="text/plain",
+                    HTTP_STRIPE_SIGNATURE=signature,
+                )
+                self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+        instance.refresh_from_db()
+        self.assertEqual(instance.stripe_subscription_id, "")
+        self.assertEqual(instance.stripe_checkout_session, "")
+        self.assertEqual(instance.plan, None)
+        self.assertEqual(
+            instance.billing_period_ends,
+            datetime.datetime(2021, 3, 2, 18, 14, 5, 0, tzinfo=pytz.UTC),
+        )
+        self.assertEqual(
+            instance.stripe_customer_id, "cus_StandardI2MVxJI"
+        )  # customer ID is kept
+

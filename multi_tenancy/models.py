@@ -203,6 +203,21 @@ class OrganizationBilling(models.Model):
         self.save()
         return self
 
+    def register_cancellation(
+        self, cancelled_at=timezone.now()
+    ) -> "OrganizationBilling":
+        """
+        Updates record after a subscription has been cancelled.
+        """
+        self.stripe_checkout_session = ""
+        self.stripe_subscription_id = ""
+        self.stripe_subscription_item_id = ""
+        self.plan = None
+        self.checkout_session_created_at = None
+        self.billing_period_ends = cancelled_at
+        self.save()
+        return self
+
 
 @receiver(post_save, sender=OrganizationBilling)
 def organization_billing_saved(
